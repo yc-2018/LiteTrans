@@ -2,6 +2,8 @@
 
 Windows 11 上的轻量翻译小工具。单个 exe 约 110 KB，常驻托盘，不装任何运行时。
 
+![](https://img11.360buyimg.com/cxxjwimg/jfs/t1/513041/40/16863/172878/6aa898a7F6b54104a/06d776b2ede96648.webp)
+
 ## 快速开始
 
 双击 `LiteTrans.exe` 即可。程序直接隐藏到托盘，不弹窗口。
@@ -107,3 +109,6 @@ Windows 11 上的轻量翻译小工具。单个 exe 约 110 KB，常驻托盘，
 
 Win11 默认把新程序的托盘图标收进溢出区。点任务栏的 `^` 展开即可看到，
 想常驻显示就把它拖到通知区域，或在「任务栏设置 → 其他系统托盘图标」里打开。
+
+## 灵感 or 前世今生
+[来自自己几年前写的py版](https://github.com/yc-2018/python_Demo/blob/master/%E8%87%AA%E5%B7%B1write/%E6%9C%89%E5%A3%B0%E7%BF%BB%E8%AF%91.py)，命令行版配置还是没有那么方便，所以突然想到用ai(claude-opus-5) VibeCode 重写了一下。。。
