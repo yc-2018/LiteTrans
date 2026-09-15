@@ -76,8 +76,15 @@ namespace LiteTrans
             p.Section("语言");
             p.Combo("目标语言", "TargetLang", Lang.All);
             p.Combo("反向语言", "PivotLang", Lang.All);
-            p.Switch("自动判断方向", "AutoSwapCJK", "中文内容自动译成反向语言");
-            p.Note("例：目标=简体中文、反向=英语时，英文译成中文，中文则译成英文。");
+            var autoSwap = p.Switch("自动判断方向", "AutoSwapCJK", "根据文本在目标语言与反向语言间切换");
+            // 旧设置页仍使用这个开关；只有实际切换时才改变顶部下拉框的模式，
+            // 这样保存设置不会把“固定 → 反向”无意覆盖成固定目标。
+            autoSwap.CheckedChanged += delegate
+            {
+                MarkTranslationModeTouched();
+                _c.TranslationMode = autoSwap.Checked ? "auto" : "forward";
+            };
+            p.Note("例：目标=简体中文、反向=英语时，英文译成中文，中文则译成英文。主窗口左上角可直接选择自动判断或固定译入语言。");
 
             p.Section("引擎");
             p.Combo("首选引擎", "Engine",

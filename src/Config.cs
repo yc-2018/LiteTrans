@@ -32,6 +32,9 @@ namespace LiteTrans
         public string TargetLang = "zh";               // 主目标语言
         public string PivotLang = "en";                // 当源语言==目标语言时改译到此语言
         public bool AutoSwapCJK = true;                // 中→英 / 外→中 自动互换
+        // 顶部模式选择：auto | forward | reverse。
+        // 留空时兼容旧版本配置，由 AutoSwapCJK 推导。
+        public string TranslationMode = "";
 
         // —— 外观 ——
         public string Theme = "auto";                  // auto | light | dark
@@ -106,7 +109,30 @@ namespace LiteTrans
                 }
             }
             catch { /* 配置损坏则回退默认值 */ }
+            cfg.NormalizeTranslationMode();
             return cfg;
+        }
+
+        /// <summary>
+        /// 将翻译模式收敛为当前支持的值，并把旧版 AutoSwapCJK 配置迁移到新字段。
+        /// </summary>
+        public void NormalizeTranslationMode()
+        {
+            var mode = (TranslationMode ?? "").Trim().ToLowerInvariant();
+            if (mode != "auto" && mode != "forward" && mode != "reverse")
+                mode = AutoSwapCJK ? "auto" : "forward";
+
+            TranslationMode = mode;
+            // AutoSwapCJK 仍由设置页使用，保持它与新模式一致。
+            AutoSwapCJK = mode == "auto";
+        }
+
+        /// <summary>读取模式；用于直接构造的旧 Config 实例。</summary>
+        public string GetTranslationMode()
+        {
+            var mode = (TranslationMode ?? "").Trim().ToLowerInvariant();
+            if (mode == "auto" || mode == "forward" || mode == "reverse") return mode;
+            return AutoSwapCJK ? "auto" : "forward";
         }
 
         /// <summary>逐字段套用，缺字段/类型不符时保留默认值，便于版本升级</summary>

@@ -14,8 +14,8 @@ namespace LiteTrans
         // 标题栏
         private Panel _bar;
         private Label _title;
-        private Label _langLabel;
-        private IconBtn _btnPin, _btnGear, _btnClose, _btnSwap;
+        private ComboBox _modePicker;
+        private IconBtn _btnPin, _btnGear, _btnClose;
 
         // 内容
         private Card _srcCard, _dstCard;
@@ -35,12 +35,14 @@ namespace LiteTrans
         private int _reqSeq;                 // 请求序号，丢弃过期响应
         private TransResult _last;
         private bool _fromSelection;         // 本次内容是否来自划词抓取
+        private bool _syncingModePicker;
         private bool _syncingEnginePicker;
         private System.Windows.Forms.Timer _loadingTimer;
         private int _loadingFrame;
 
         private static readonly string[] EngineKeys = { "transmart", "ai", "baidu" };
         private static readonly string[] EngineLabels = { "腾讯翻译", "AI 精翻", "百度翻译" };
+        private static readonly string[] ModeKeys = { "auto", "forward", "reverse" };
 
         public MainForm(TrayApp app)
         {
@@ -85,24 +87,24 @@ namespace LiteTrans
             };
             _title.MouseDown += Drag_MouseDown;
 
-            _langLabel = new Label
+            _modePicker = new ComboBox
             {
-                AutoSize = false,
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat,
+                IntegralHeight = false,
+                Size = new Size(190, 26),
                 Font = new Font("Microsoft YaHei UI", 8.5f),
-                Location = new Point(58, 13),
-                BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleLeft,
-                AutoEllipsis = true,
+                FormattingEnabled = true,
+                DropDownWidth = 240,
+                AccessibleName = "翻译模式",
+                AccessibleDescription = "选择自动判断方向或固定译入语言",
             };
-            _langLabel.MouseDown += Drag_MouseDown;
-            _langLabel.Padding = new Padding(2, 0, 0, 0);
+            _modePicker.SelectedIndexChanged += ModePicker_SelectedIndexChanged;
 
-            _btnSwap = new IconBtn { Kind = "swap", Tip = "切换翻译方向" };
             _btnPin = new IconBtn { Kind = "pin", Tip = "窗口置顶" };
             _btnGear = new IconBtn { Kind = "gear", Tip = "设置" };
             _btnClose = new IconBtn { Kind = "close", Tip = "收回托盘 (Esc)" };
 
-            _btnSwap.Click += (s, e) => { SwapDirection(); };
             _btnPin.Click += (s, e) =>
             {
                 C.TopMost = !C.TopMost;
@@ -113,7 +115,7 @@ namespace LiteTrans
             _btnGear.Click += (s, e) => _app.ShowSettings();
             _btnClose.Click += (s, e) => HideToTray();
 
-            _bar.Controls.AddRange(new Control[] { _title, _langLabel, _btnSwap, _btnPin, _btnGear, _btnClose });
+            _bar.Controls.AddRange(new Control[] { _title, _modePicker, _btnPin, _btnGear, _btnClose });
 
             // ——— 原文 ———
             _srcCard = new Card();
@@ -194,8 +196,46 @@ namespace LiteTrans
             Deactivate += MainForm_Deactivate;
 
             ResumeLayout();
+            SyncModePicker();
             SyncEnginePicker();
             Relayout();
+        }
+
+        private void ModePicker_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_syncingModePicker || _modePicker.SelectedIndex < 0 ||
+                _modePicker.SelectedIndex >= ModeKeys.Length) return;
+
+            C.TranslationMode = ModeKeys[_modePicker.SelectedIndex];
+            C.AutoSwapCJK = C.TranslationMode == "auto";
+            C.NormalizeTranslationMode();
+            C.Save();
+            SyncModePicker();
+            SetStatus("已切换到 " + _modePicker.Text);
+            if (!string.IsNullOrWhiteSpace(_src.Text)) TranslateNow(_src.Text);
+        }
+
+        private void SyncModePicker()
+        {
+            if (_modePicker == null) return;
+            _syncingModePicker = true;
+            try
+            {
+                var target = Lang.DisplayName(C.TargetLang);
+                var pivot = Lang.DisplayName(C.PivotLang);
+                _modePicker.BeginUpdate();
+                _modePicker.Items.Clear();
+                _modePicker.Items.Add("自动判断方向");
+                _modePicker.Items.Add("固定译成 " + target);
+                _modePicker.Items.Add("固定译成 " + pivot);
+                var mode = C.GetTranslationMode();
+                int index = 0;
+                for (int i = 0; i < ModeKeys.Length; i++)
+                    if (ModeKeys[i] == mode) { index = i; break; }
+                _modePicker.SelectedIndex = index;
+                _modePicker.EndUpdate();
+            }
+            finally { _syncingModePicker = false; }
         }
 
         private void EnginePicker_SelectedIndexChanged(object sender, EventArgs e)

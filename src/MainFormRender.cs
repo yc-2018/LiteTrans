@@ -90,7 +90,6 @@ namespace LiteTrans
             _dst.SelectionStart = 0;
             _dst.ScrollToCaret();
 
-            _langLabel.Text = Lang.Detected(r.SrcLang) + "  →  " + Lang.DisplayName(r.TgtLang);
             SetStatus(EngineName(r.Engine) + " · " + r.ElapsedMs + " ms"
                     + (r.Dict.Count > 0 ? " · 含词典" : "")
                     + (_fromSelection ? " · 划词" : "")
@@ -136,7 +135,7 @@ namespace LiteTrans
             if (e.Control && e.Shift && e.KeyCode == Keys.C) { e.SuppressKeyPress = true; CopyResult(); return; }
             if (e.Control && e.KeyCode == Keys.D) { e.SuppressKeyPress = true; SpeakResult(); return; }
             if (e.Control && e.KeyCode == Keys.Oemcomma) { e.SuppressKeyPress = true; _app.ShowSettings(); return; }
-            if (e.Control && e.KeyCode == Keys.Tab) { e.SuppressKeyPress = true; SwapDirection(); return; }
+            if (e.Control && e.KeyCode == Keys.Tab) { e.SuppressKeyPress = true; CycleTranslationMode(); return; }
         }
 
         private void MainForm_Deactivate(object sender, EventArgs e)
@@ -164,14 +163,19 @@ namespace LiteTrans
             SetStatus("朗读中…");
         }
 
-        /// <summary>互换主/备目标语言，并立即重译</summary>
-        private void SwapDirection()
+        /// <summary>在自动、固定目标、固定反向三种模式间循环，并立即重译</summary>
+        private void CycleTranslationMode()
         {
-            var tmp = C.TargetLang;
-            C.TargetLang = C.PivotLang;
-            C.PivotLang = tmp;
+            var mode = C.GetTranslationMode();
+            if (mode == "auto") mode = "forward";
+            else if (mode == "forward") mode = "reverse";
+            else mode = "auto";
+
+            C.TranslationMode = mode;
+            C.AutoSwapCJK = mode == "auto";
+            C.NormalizeTranslationMode();
             C.Save();
-            _langLabel.Text = "→ " + Lang.DisplayName(C.TargetLang);
+            SyncModePicker();
             if (!string.IsNullOrWhiteSpace(_src.Text)) TranslateNow(_src.Text);
         }
 

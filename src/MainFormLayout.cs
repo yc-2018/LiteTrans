@@ -28,13 +28,11 @@ namespace LiteTrans
             _btnClose.Location = new Point(right - _btnClose.Width, 6);
             _btnGear.Location = new Point(_btnClose.Left - _btnGear.Width - 2, 6);
             _btnPin.Location = new Point(_btnGear.Left - _btnPin.Width - 2, 6);
-            _btnSwap.Location = new Point(_btnPin.Left - _btnSwap.Width - 2, 6);
 
-            // 语言标签跟随标题实际宽度，并在交换按钮前留出缓冲区，
-            // 避免“自动”的首字或较长语言名被相邻控件覆盖。
-            int langLeft = _title.Right + 14;
-            _langLabel.SetBounds(langLeft, 8,
-                Math.Max(0, _btnSwap.Left - langLeft - 8), 24);
+            // 翻译模式下拉框放在标题旁，右侧按钮不再承担方向切换。
+            int modeLeft = _title.Right + 12;
+            int modeWidth = Math.Min(240, Math.Max(150, _btnPin.Left - modeLeft - 10));
+            _modePicker.SetBounds(modeLeft, 7, modeWidth, 26);
 
             int top = _bar.Height;
             int bottom = h - _foot.Height;
@@ -90,7 +88,11 @@ namespace LiteTrans
             _foot.BackColor = t.Bg;
 
             foreach (Control c in _bar.Controls)
-                if (c is Label) { c.ForeColor = c == _langLabel ? t.SubText : t.Text; }
+                if (c is Label) c.ForeColor = t.Text;
+
+            _modePicker.BackColor = t.Card;
+            _modePicker.ForeColor = t.Text;
+            SyncModePicker();
 
             _status.ForeColor = t.SubText;
 

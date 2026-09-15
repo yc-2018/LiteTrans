@@ -16,12 +16,20 @@ namespace LiteTrans
         private FlatBtn _btnSave, _btnCancel;
         private readonly List<Action> _commits = new List<Action>();
         private Label _hint;
+        private readonly string _initialTranslationMode;
+        private bool _translationModeTouched;
 
         public SettingsForm(TrayApp app)
         {
             _app = app;
             _c = app.Cfg.Clone();
+            _initialTranslationMode = _c.GetTranslationMode();
             BuildUi();
+        }
+
+        private void MarkTranslationModeTouched()
+        {
+            _translationModeTouched = true;
         }
 
         private void BuildUi()
@@ -141,6 +149,11 @@ namespace LiteTrans
         {
             if (!ValidateHotkey()) return;
             CommitEditors();
+            // 设置页仍展示旧版“自动判断方向”开关。只有用户实际操作过开关，
+            // 才让它改写顶部模式；否则保留打开设置前的“固定 → 反向”等模式。
+            if (!_translationModeTouched) _c.TranslationMode = _initialTranslationMode;
+            else _c.TranslationMode = _c.AutoSwapCJK ? "auto" : "forward";
+            _c.NormalizeTranslationMode();
 
             // 开机自启需要落到注册表
             if (_c.AutoStart != Startup.IsEnabled())

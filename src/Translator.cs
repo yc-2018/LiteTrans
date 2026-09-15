@@ -28,12 +28,16 @@ namespace LiteTrans
 
     public static class Translator
     {
-        /// <summary>决定译入语言：中文内容译成 PivotLang，其余一律译成 TargetLang</summary>
+        /// <summary>根据翻译模式决定译入语言。</summary>
         public static string DecideTarget(string text, Config c)
         {
-            if (!c.AutoSwapCJK) return c.TargetLang;
+            var mode = c.GetTranslationMode();
+            if (mode == "forward") return c.TargetLang;
+            if (mode == "reverse") return c.PivotLang;
+
             bool srcIsCjk = TextPrep.CjkRatio(text) > 0.2;
-            bool targetIsCjk = c.TargetLang == "zh" || c.TargetLang == "ja" || c.TargetLang == "ko";
+            bool targetIsCjk = c.TargetLang == "zh" || c.TargetLang == "zh-TW"
+                             || c.TargetLang == "ja" || c.TargetLang == "ko";
             return (srcIsCjk && targetIsCjk) ? c.PivotLang : c.TargetLang;
         }
 
