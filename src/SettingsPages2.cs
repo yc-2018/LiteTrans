@@ -53,7 +53,7 @@ namespace LiteTrans
             p.ButtonRow("", "测试百度翻译", delegate { TestEngine("baidu"); }, 150);
 
             p.Section("连通性测试");
-            p.ButtonRow("", "测试首选引擎", delegate { TestEngine(_c.Engine); }, 150);
+            p.ButtonRow("", "测试首选引擎", delegate { TestEngine(null); }, 150);
             p.ButtonRow("", "打开配置文件夹", delegate
             {
                 try
@@ -74,7 +74,7 @@ namespace LiteTrans
         {
             CommitEditors();
             var cfg = _c.Clone();
-            var requested = engine;
+            var requested = string.IsNullOrWhiteSpace(engine) ? _c.Engine : engine;
             if (!string.IsNullOrWhiteSpace(requested)) cfg.Engine = requested;
             if (requested == "ai") cfg.AiEnabled = true;
 
