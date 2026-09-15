@@ -51,21 +51,21 @@ namespace LiteTrans
                 Visible = true,
                 Text = "轻译 · " + Cfg.Hotkey,
             };
-            _tray.MouseClick += Tray_MouseClick;
-            _tray.DoubleClick += (s, e) => ShowMain(true);
+            // 使用 MouseUp 处理左键，避免 NotifyIcon 的双击手势吞掉单击消息。
+            _tray.MouseUp += Tray_MouseUp;
             RebuildMenu();
         }
 
-        private void Tray_MouseClick(object sender, MouseEventArgs e)
+        private void Tray_MouseUp(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left) ShowMain(true);
+            if (e.Button == MouseButtons.Left) ShowMainFromTray();
         }
 
         public void RebuildMenu()
         {
             var m = new ContextMenuStrip { ShowImageMargin = false, Font = new Font("Microsoft YaHei UI", 9f) };
 
-            m.Items.Add(Item("翻译剪贴板　" + Cfg.Hotkey, delegate { ShowMain(true); }));
+            m.Items.Add(Item("翻译剪贴板　" + Cfg.Hotkey, delegate { ShowMainFromTray(); }));
             m.Items.Add(Item("打开输入框", delegate { ShowMain(false); }));
             m.Items.Add(new ToolStripSeparator());
 
@@ -92,13 +92,21 @@ namespace LiteTrans
             var auto = new ToolStripMenuItem("开机自启") { Checked = Startup.IsEnabled(), CheckOnClick = true };
             auto.Click += delegate
             {
-                Cfg.AutoStart = auto.Checked;
-                if (!Startup.Set(auto.Checked))
+                var requested = auto.Checked;
+                Startup.Set(requested);
+                var actual = Startup.IsEnabled();
+                auto.Checked = actual;
+                Cfg.AutoStart = actual;
+                if (actual != requested)
                 {
-                    MessageBox.Show("写入启动项失败，可能被安全软件拦截。", "轻译",
+                    MessageBox.Show("开机自启状态未能更新，可能被安全软件拦截。", "轻译",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    auto.Checked = Startup.IsEnabled();
-                    Cfg.AutoStart = auto.Checked;
+                }
+                else
+                {
+                    _tray.ShowBalloonTip(2500, "开机自启",
+                        actual ? "已开启，登录 Windows 后会自动运行。" : "已关闭，不再随 Windows 自动运行。",
+                        ToolTipIcon.Info);
                 }
                 Cfg.Save();
             };

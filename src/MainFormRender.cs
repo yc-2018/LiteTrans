@@ -6,6 +6,34 @@ namespace LiteTrans
 {
     public partial class MainForm
     {
+        private static readonly string[] LoadingFrames = { "翻译中", "翻译中 ·", "翻译中 ··", "翻译中 ···" };
+
+        private void BeginLoadingDisplay()
+        {
+            _loadingFrame = 0;
+            _dst.Clear();
+            _dst.ReadOnly = true;
+            _dst.SelectionColor = Theme.Current.SubText;
+            _dst.SelectionFont = _dst.Font;
+            _dst.Text = LoadingFrames[0];
+            _loadingTimer.Start();
+        }
+
+        private void UpdateLoadingDisplay()
+        {
+            if (_dst == null || _dst.IsDisposed) return;
+            _loadingFrame = (_loadingFrame + 1) % LoadingFrames.Length;
+            _dst.SelectAll();
+            _dst.SelectedText = LoadingFrames[_loadingFrame];
+            _dst.SelectionStart = 0;
+            _dst.SelectionLength = 0;
+        }
+
+        private void StopLoadingDisplay()
+        {
+            if (_loadingTimer != null) _loadingTimer.Stop();
+        }
+
         /// <summary>把译文、音标、分词性释义排进 RichTextBox，并做轻着色</summary>
         private void RenderResult(TransResult r)
         {
@@ -16,6 +44,11 @@ namespace LiteTrans
             var baseFont = _dst.Font;
             var small = new Font(baseFont.FontFamily, Math.Max(8f, baseFont.Size - 2.5f));
             var bold = new Font(baseFont.FontFamily, baseFont.Size, FontStyle.Bold);
+
+            if (!string.IsNullOrWhiteSpace(r.FallbackNotice))
+            {
+                Append("提示：" + r.FallbackNotice + "\n\n", small, t.Accent);
+            }
 
             if (!r.Ok)
             {
@@ -60,7 +93,8 @@ namespace LiteTrans
             _langLabel.Text = Lang.Detected(r.SrcLang) + "  →  " + Lang.DisplayName(r.TgtLang);
             SetStatus(EngineName(r.Engine) + " · " + r.ElapsedMs + " ms"
                     + (r.Dict.Count > 0 ? " · 含词典" : "")
-                    + (_fromSelection ? " · 划词" : ""));
+                    + (_fromSelection ? " · 划词" : "")
+                    + (string.IsNullOrWhiteSpace(r.FallbackNotice) ? "" : " · " + r.FallbackNotice));
         }
 
         private void Append(string text, Font font, Color color)

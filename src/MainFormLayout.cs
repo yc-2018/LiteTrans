@@ -30,6 +30,12 @@ namespace LiteTrans
             _btnPin.Location = new Point(_btnGear.Left - _btnPin.Width - 2, 6);
             _btnSwap.Location = new Point(_btnPin.Left - _btnSwap.Width - 2, 6);
 
+            // 语言标签跟随标题实际宽度，并在交换按钮前留出缓冲区，
+            // 避免“自动”的首字或较长语言名被相邻控件覆盖。
+            int langLeft = _title.Right + 14;
+            _langLabel.SetBounds(langLeft, 8,
+                Math.Max(0, _btnSwap.Left - langLeft - 8), 24);
+
             int top = _bar.Height;
             int bottom = h - _foot.Height;
             int avail = bottom - top - Pad * 3;
@@ -49,6 +55,13 @@ namespace LiteTrans
             _btnTrans.Location = new Point(right - _btnTrans.Width, 7);
             _btnCopy.Location = new Point(_btnTrans.Left - _btnCopy.Width - 6, 8);
             _btnSpeak.Location = new Point(_btnCopy.Left - _btnSpeak.Width - 2, 8);
+
+            // 左下角放置可直接切换的引擎选择器，状态信息占用剩余空间。
+            _engineLabel.Location = new Point(Pad, 9);
+            _enginePicker.Location = new Point(_engineLabel.Right + 6, 8);
+            int statusLeft = _enginePicker.Right + 10;
+            int statusRight = _btnSpeak.Left - 10;
+            _status.SetBounds(statusLeft, 8, Math.Max(0, statusRight - statusLeft), 28);
         }
 
         /// <summary>原文只有一个单词时不该占掉四成高度，按真实内容高度收缩</summary>
@@ -80,6 +93,11 @@ namespace LiteTrans
                 if (c is Label) { c.ForeColor = c == _langLabel ? t.SubText : t.Text; }
 
             _status.ForeColor = t.SubText;
+
+            _engineLabel.ForeColor = t.SubText;
+            _enginePicker.BackColor = t.Card;
+            _enginePicker.ForeColor = t.Text;
+            SyncEnginePicker();
 
             _srcCard.BackColor = t.Panel;
             _dstCard.BackColor = t.Panel;

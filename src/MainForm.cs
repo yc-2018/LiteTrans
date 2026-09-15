@@ -13,6 +13,7 @@ namespace LiteTrans
 
         // 标题栏
         private Panel _bar;
+        private Label _title;
         private Label _langLabel;
         private IconBtn _btnPin, _btnGear, _btnClose, _btnSwap;
 
@@ -23,6 +24,8 @@ namespace LiteTrans
 
         // 底部
         private Panel _foot;
+        private Label _engineLabel;
+        private ComboBox _enginePicker;
         private Label _status;
         private FlatBtn _btnTrans;
         private IconBtn _btnSpeak, _btnCopy;
@@ -32,6 +35,12 @@ namespace LiteTrans
         private int _reqSeq;                 // 请求序号，丢弃过期响应
         private TransResult _last;
         private bool _fromSelection;         // 本次内容是否来自划词抓取
+        private bool _syncingEnginePicker;
+        private System.Windows.Forms.Timer _loadingTimer;
+        private int _loadingFrame;
+
+        private static readonly string[] EngineKeys = { "transmart", "ai", "baidu" };
+        private static readonly string[] EngineLabels = { "腾讯翻译", "AI 精翻", "百度翻译" };
 
         public MainForm(TrayApp app)
         {
@@ -66,7 +75,7 @@ namespace LiteTrans
             _bar = new Panel { Dock = DockStyle.Top, Height = 40 };
             _bar.MouseDown += Drag_MouseDown;
 
-            var title = new Label
+            _title = new Label
             {
                 Text = "轻译",
                 AutoSize = true,
@@ -74,16 +83,19 @@ namespace LiteTrans
                 Location = new Point(14, 10),
                 BackColor = Color.Transparent,
             };
-            title.MouseDown += Drag_MouseDown;
+            _title.MouseDown += Drag_MouseDown;
 
             _langLabel = new Label
             {
-                AutoSize = true,
+                AutoSize = false,
                 Font = new Font("Microsoft YaHei UI", 8.5f),
                 Location = new Point(58, 13),
                 BackColor = Color.Transparent,
+                TextAlign = ContentAlignment.MiddleLeft,
+                AutoEllipsis = true,
             };
             _langLabel.MouseDown += Drag_MouseDown;
+            _langLabel.Padding = new Padding(2, 0, 0, 0);
 
             _btnSwap = new IconBtn { Kind = "swap", Tip = "切换翻译方向" };
             _btnPin = new IconBtn { Kind = "pin", Tip = "窗口置顶" };
@@ -101,7 +113,7 @@ namespace LiteTrans
             _btnGear.Click += (s, e) => _app.ShowSettings();
             _btnClose.Click += (s, e) => HideToTray();
 
-            _bar.Controls.AddRange(new Control[] { title, _langLabel, _btnSwap, _btnPin, _btnGear, _btnClose });
+            _bar.Controls.AddRange(new Control[] { _title, _langLabel, _btnSwap, _btnPin, _btnGear, _btnClose });
 
             // ——— 原文 ———
             _srcCard = new Card();
@@ -132,14 +144,38 @@ namespace LiteTrans
             };
             _dst.KeyDown += Global_KeyDown;
             _dstCard.Controls.Add(_dst);
+            _loadingTimer = new System.Windows.Forms.Timer { Interval = 180 };
+            _loadingTimer.Tick += delegate { UpdateLoadingDisplay(); };
 
             // ——— 底部 ———
             _foot = new Panel { Dock = DockStyle.Bottom, Height = 44 };
+            _engineLabel = new Label
+            {
+                Text = "引擎",
+                AutoSize = false,
+                Size = new Size(38, 26),
+                TextAlign = ContentAlignment.MiddleLeft,
+                BackColor = Color.Transparent,
+                Font = new Font("Microsoft YaHei UI", 8.5f),
+            };
+            _enginePicker = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                FlatStyle = FlatStyle.Flat,
+                IntegralHeight = false,
+                Size = new Size(126, 26),
+                Font = new Font("Microsoft YaHei UI", 8.5f),
+                FormattingEnabled = true,
+            };
+            for (int i = 0; i < EngineLabels.Length; i++) _enginePicker.Items.Add(EngineLabels[i]);
+            _enginePicker.SelectedIndexChanged += EnginePicker_SelectedIndexChanged;
+
             _status = new Label
             {
-                AutoSize = true,
+                AutoSize = false,
                 Font = new Font("Microsoft YaHei UI", 8.5f),
-                Location = new Point(14, 15),
+                TextAlign = ContentAlignment.MiddleLeft,
+                AutoEllipsis = true,
                 BackColor = Color.Transparent,
             };
             _btnTrans = new FlatBtn { Text = "翻译", Primary = true, Size = new Size(76, 30) };
@@ -149,7 +185,7 @@ namespace LiteTrans
             _btnSpeak.Click += (s, e) => SpeakResult();
             _btnCopy.Click += (s, e) => CopyResult();
 
-            _foot.Controls.AddRange(new Control[] { _status, _btnTrans, _btnSpeak, _btnCopy });
+            _foot.Controls.AddRange(new Control[] { _engineLabel, _enginePicker, _status, _btnTrans, _btnSpeak, _btnCopy });
 
             Controls.AddRange(new Control[] { _srcCard, _dstCard, _foot, _bar });
 
@@ -158,7 +194,38 @@ namespace LiteTrans
             Deactivate += MainForm_Deactivate;
 
             ResumeLayout();
+            SyncEnginePicker();
             Relayout();
+        }
+
+        private void EnginePicker_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_syncingEnginePicker || _enginePicker.SelectedIndex < 0 ||
+                _enginePicker.SelectedIndex >= EngineKeys.Length) return;
+
+            var engine = EngineKeys[_enginePicker.SelectedIndex];
+            if (C.Engine == engine) return;
+
+            C.Engine = engine;
+            C.Save();
+            SetStatus("已切换到 " + EngineName(engine));
+
+            // 已有原文时立即重译，让下拉框的切换结果可见。
+            if (!string.IsNullOrWhiteSpace(_src.Text)) TranslateNow(_src.Text);
+        }
+
+        private void SyncEnginePicker()
+        {
+            if (_enginePicker == null) return;
+            _syncingEnginePicker = true;
+            try
+            {
+                int index = 0;
+                for (int i = 0; i < EngineKeys.Length; i++)
+                    if (EngineKeys[i] == C.Engine) { index = i; break; }
+                if (_enginePicker.SelectedIndex != index) _enginePicker.SelectedIndex = index;
+            }
+            finally { _syncingEnginePicker = false; }
         }
     }
 }

@@ -33,7 +33,8 @@ namespace LiteTrans
         {
             try
             {
-                using (var k = Registry.CurrentUser.OpenSubKey(RunKey, true))
+                // Run 项可能尚不存在；CreateSubKey 让首次开启自启也能正常写入。
+                using (var k = Registry.CurrentUser.CreateSubKey(RunKey))
                 {
                     if (k == null) return false;
                     if (enable) k.SetValue(ValueName, "\"" + ExePath + "\" --tray");

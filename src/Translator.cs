@@ -21,6 +21,7 @@ namespace LiteTrans
         public string PhoneticUk, PhoneticUs;
         public List<DictEntry> Dict = new List<DictEntry>();
         public string Error;
+        public string FallbackNotice;
         public int ElapsedMs;
         public bool Ok { get { return string.IsNullOrEmpty(Error) && !string.IsNullOrEmpty(Text); } }
     }
@@ -38,6 +39,12 @@ namespace LiteTrans
 
         public static TransResult Translate(string raw, Config c)
         {
+            return Translate(raw, c, true, null);
+        }
+
+        /// <summary>翻译入口；指定测试引擎时允许调用方限制回退范围。</summary>
+        public static TransResult Translate(string raw, Config c, bool allowFallback, string requestedEngine)
+        {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var text = TextPrep.Clean(raw, c);
             var r = new TransResult { Source = text, TgtLang = DecideTarget(text, c) };
@@ -49,9 +56,23 @@ namespace LiteTrans
             }
 
             // 主引擎（失败则依次回退）
-            var order = BuildChain(c);
+            var requested = string.IsNullOrWhiteSpace(requestedEngine) ? c.Engine : requestedEngine;
+            bool requestedConfigured = IsEngineConfigured(requested, c);
+            if (!allowFallback && !requestedConfigured)
+            {
+                r.Error = MissingConfigNotice(requested, null);
+                r.ElapsedMs = (int)sw.ElapsedMilliseconds;
+                return r;
+            }
+
+            var order = allowFallback
+                ? BuildChain(c)
+                : new List<string> { requested };
             foreach (var eng in order)
             {
+                // 每个引擎都复用同一个结果对象；清掉上一次尝试留下的字段，
+                // 避免失败状态或部分译文影响下一个引擎的 Ok 判断。
+                ResetAttempt(r);
                 try
                 {
                     switch (eng)
@@ -60,7 +81,18 @@ namespace LiteTrans
                         case "baidu": Baidu(text, r, c); break;
                         default: Transmart(text, r, c); break;
                     }
-                    if (r.Ok) { r.Engine = eng; r.Error = null; break; }
+                    if (r.Ok)
+                    {
+                        r.Engine = eng;
+                        r.Error = null;
+                        if (eng != requested)
+                        {
+                            r.FallbackNotice = requestedConfigured
+                                ? "首选引擎不可用，已自动切换到" + EngineDisplay(eng)
+                                : MissingConfigNotice(requested, eng);
+                        }
+                        break;
+                    }
                 }
                 catch (Exception ex) { r.Error = Http.DescribeError(ex); }
             }
@@ -72,20 +104,57 @@ namespace LiteTrans
             }
 
             if (!r.Ok && string.IsNullOrEmpty(r.Error)) r.Error = "所有翻译引擎均未返回结果";
+            if (!r.Ok && !requestedConfigured)
+                r.FallbackNotice = MissingConfigNotice(requested, null);
             r.ElapsedMs = (int)sw.ElapsedMilliseconds;
             return r;
+        }
+
+        private static void ResetAttempt(TransResult r)
+        {
+            r.Text = "";
+            r.Engine = "";
+            r.SrcLang = "";
+            r.PhoneticUk = null;
+            r.PhoneticUs = null;
+            r.Dict.Clear();
+            r.Error = null;
+        }
+
+        private static bool IsEngineConfigured(string engine, Config c)
+        {
+            if (engine == "baidu")
+                return !string.IsNullOrWhiteSpace(c.BaiduAppId) && !string.IsNullOrWhiteSpace(c.BaiduKey);
+            if (engine == "ai")
+                return c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey) &&
+                       !string.IsNullOrWhiteSpace(c.AiBaseUrl);
+            return engine == "transmart" || string.IsNullOrWhiteSpace(engine);
+        }
+
+        private static string MissingConfigNotice(string engine, string actual)
+        {
+            string name = engine == "baidu" ? "百度翻译" : engine == "ai" ? "AI 精翻" : EngineDisplay(engine);
+            if (string.IsNullOrEmpty(actual)) return name + "未配置，当前未使用该引擎";
+            return name + "未配置，已自动切换到" + EngineDisplay(actual);
         }
 
         private static List<string> BuildChain(Config c)
         {
             var list = new List<string>();
-            if (c.Engine == "ai" && c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey)) list.Add("ai");
-            else if (c.Engine == "baidu" && !string.IsNullOrWhiteSpace(c.BaiduAppId)) list.Add("baidu");
+            if (c.Engine == "ai" && c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey) && !string.IsNullOrWhiteSpace(c.AiBaseUrl)) list.Add("ai");
+            else if (c.Engine == "baidu" && !string.IsNullOrWhiteSpace(c.BaiduAppId) && !string.IsNullOrWhiteSpace(c.BaiduKey)) list.Add("baidu");
 
             if (!list.Contains("transmart")) list.Add("transmart");      // 免密钥主力，永远兜底
-            if (!list.Contains("baidu") && !string.IsNullOrWhiteSpace(c.BaiduAppId)) list.Add("baidu");
-            if (!list.Contains("ai") && c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey)) list.Add("ai");
+            if (!list.Contains("baidu") && !string.IsNullOrWhiteSpace(c.BaiduAppId) && !string.IsNullOrWhiteSpace(c.BaiduKey)) list.Add("baidu");
+            if (!list.Contains("ai") && c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey) && !string.IsNullOrWhiteSpace(c.AiBaseUrl)) list.Add("ai");
             return list;
+        }
+
+        private static string EngineDisplay(string engine)
+        {
+            if (engine == "ai") return "AI 精翻";
+            if (engine == "baidu") return "百度翻译";
+            return "腾讯翻译";
         }
 
         // ================== 腾讯交互翻译（免密钥） ==================

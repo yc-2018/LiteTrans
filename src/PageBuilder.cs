@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms;
@@ -17,6 +18,7 @@ namespace LiteTrans
         private const int LabelW = 178;
         private const int CtrlX = 190;
         private const int RowH = 34;
+        private const int TextRowH = 40;
 
         public PageBuilder(Panel panel, Config cfg, List<Action> commits)
         {
@@ -89,6 +91,54 @@ namespace LiteTrans
             _y += h + 10;
         }
 
+        /// <summary>带一个可点击链接的说明行</summary>
+        public void LinkNote(string before, string linkText, string after, string url)
+        {
+            const int w = 596;
+            var text = (before ?? "") + (linkText ?? "") + (after ?? "");
+            var font = new Font("Microsoft YaHei UI", 8.5f);
+
+            int h;
+            try
+            {
+                h = TextRenderer.MeasureText(text, font,
+                        new Size(w, int.MaxValue), TextFormatFlags.WordBreak).Height + 4;
+            }
+            catch { h = 34; }
+            if (h < 20) h = 20;
+
+            var l = new LinkLabel
+            {
+                Text = text,
+                AutoSize = false,
+                Size = new Size(w, h),
+                Location = new Point(0, _y),
+                ForeColor = Theme.Current.SubText,
+                LinkColor = Theme.Current.Accent,
+                ActiveLinkColor = Theme.Current.Accent,
+                VisitedLinkColor = Theme.Current.Accent,
+                BackColor = Color.Transparent,
+                Font = font,
+                LinkBehavior = LinkBehavior.HoverUnderline,
+                LinkArea = new LinkArea((before ?? "").Length, (linkText ?? "").Length),
+                TabStop = true,
+            };
+            l.LinkClicked += delegate
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch
+                {
+                    try { Process.Start("explorer.exe", url); }
+                    catch { MessageBox.Show("无法打开链接：" + url, "轻译", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+                }
+            };
+            _p.Controls.Add(l);
+            _y += h + 10;
+        }
+
         public Toggle Switch(string label, string field, string desc = null)
         {
             var fi = F(field);
@@ -155,11 +205,11 @@ namespace LiteTrans
             var fi = F(field);
             _p.Controls.Add(MakeLabel(label));
 
-            var card = new Card { Location = new Point(CtrlX, _y), Size = new Size(width, 28), BackColor = Theme.Current.Card, Radius = 6 };
+            var card = new Card { Location = new Point(CtrlX, _y), Size = new Size(width, 30), BackColor = Theme.Current.Card, Radius = 6 };
             var tb = new TextBox
             {
                 BorderStyle = BorderStyle.None,
-                Location = new Point(8, 5),
+                Location = new Point(8, 6),
                 Width = width - 16,
                 Text = Convert.ToString(fi.GetValue(_c)),
                 BackColor = Theme.Current.Card,
@@ -180,7 +230,7 @@ namespace LiteTrans
                 }
                 else fi.SetValue(_c, tb.Text.Trim());
             });
-            _y += RowH;
+            _y += TextRowH;
             return tb;
         }
 

@@ -31,22 +31,40 @@ namespace LiteTrans
             }
         }
 
+        public void ShowMainFromTray()
+        {
+            Dbg.Log("ShowMainFromTray 进入");
+            try { Main.ShowFromTray(); Dbg.Log("ShowMainFromTray 正常返回"); }
+            catch (Exception ex)
+            {
+                Dbg.Log("ShowMainFromTray 异常: " + ex);
+                MessageBox.Show("打开窗口失败：" + ex.Message, "轻译",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         public void ShowSettings() { ShowSettings(0); }
 
         public void ShowSettings(int page)
         {
             if (_settings != null && !_settings.IsDisposed)
             {
+                // 主翻译窗可能处于置顶状态，设置窗也要进入同一置顶层级，
+                // 否则它会被主窗盖住，只能先拖动翻译窗才能操作。
+                _settings.TopMost = Cfg.TopMost;
                 _settings.Show();
                 _settings.GoToTab(page);
                 Native.ForceForeground(_settings);
+                _settings.BringToFront();
                 return;
             }
             _settings = new SettingsForm(this);
+            _settings.TopMost = Cfg.TopMost;
             _settings.GoToTab(page);
             _settings.FormClosed += delegate { _settings = null; };
             _settings.Show();
             Native.ForceForeground(_settings);
+            _settings.BringToFront();
         }
 
         /// <summary>设置保存后调用：重注册热键、重绘主题、刷新托盘</summary>
@@ -171,7 +189,7 @@ namespace LiteTrans
             else if (WM_WAKE != 0 && m.Msg == WM_WAKE)
             {
                 if (m.WParam.ToInt32() == 1) _app.ShowSettings();
-                else _app.ShowMain(true);
+                else _app.ShowMainFromTray();
             }
             base.WndProc(ref m);
         }

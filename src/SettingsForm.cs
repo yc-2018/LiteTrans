@@ -145,12 +145,12 @@ namespace LiteTrans
             // 开机自启需要落到注册表
             if (_c.AutoStart != Startup.IsEnabled())
             {
-                if (!Startup.Set(_c.AutoStart))
-                {
-                    MessageBox.Show("写入开机启动项失败，可能被安全软件拦截。", "轻译",
+                var requestedAutoStart = _c.AutoStart;
+                Startup.Set(requestedAutoStart);
+                _c.AutoStart = Startup.IsEnabled();
+                if (_c.AutoStart != requestedAutoStart)
+                    MessageBox.Show("开机自启状态未能更新，可能被安全软件拦截。", "轻译",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    _c.AutoStart = Startup.IsEnabled();
-                }
             }
 
             foreach (var f in typeof(Config).GetFields()) f.SetValue(_app.Cfg, f.GetValue(_c));

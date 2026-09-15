@@ -54,6 +54,21 @@ namespace LiteTrans
             }
         }
 
+        /// <summary>托盘唤起：先显示窗口，再读取剪贴板，避免划词/UIA 查询挡住弹窗。</summary>
+        public void ShowFromTray()
+        {
+            ShowUp(false);
+
+            var text = SafeClipboardText();
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            _fromSelection = false;
+            _src.Text = TextPrep.Clean(text, C);
+            _src.Select(0, 0);
+            _src.ScrollToCaret();
+            TranslateNow(_src.Text);
+        }
+
         private void PositionWindow()
         {
             var screen = Screen.FromPoint(Cursor.Position).WorkingArea;
@@ -102,6 +117,7 @@ namespace LiteTrans
         public void HideToTray()
         {
             Speech.Stop();
+            StopLoadingDisplay();
             if (C.ShowPosition == "remember" && WindowState == FormWindowState.Normal)
             {
                 C.WinX = Location.X; C.WinY = Location.Y;
@@ -122,6 +138,7 @@ namespace LiteTrans
             int seq = ++_reqSeq;
             _btnTrans.Enabled = false;
             _btnTrans.Text = "翻译中";
+            BeginLoadingDisplay();
             SetStatus("正在请求 " + EngineName(C.Engine) + " …");
 
             var cfgSnapshot = C.Clone();
@@ -139,6 +156,7 @@ namespace LiteTrans
                         if (seq != _reqSeq) return;
                         _btnTrans.Enabled = true;
                         _btnTrans.Text = "翻译";
+                        StopLoadingDisplay();
                         _last = r;
                         RenderResult(r);
                         AfterTranslate(r);

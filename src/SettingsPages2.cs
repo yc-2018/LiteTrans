@@ -43,14 +43,17 @@ namespace LiteTrans
             p.TextField("模型名称", "AiModel", 220);
             p.TextField("系统提示词", "AiPrompt", 350);
             p.Note("地址填到 /v1 即可，程序自动补 /chat/completions；{target} 会替换为目标语言。");
+            p.ButtonRow("", "测试 AI 接口", delegate { TestEngine("ai"); }, 150);
 
             p.Section("百度翻译开放平台");
             p.TextField("APP ID", "BaiduAppId", 220);
             p.TextField("密钥", "BaiduKey", 220, true);
-            p.Note("在 fanyi-api.baidu.com 免费申请，标准版每月有免费额度。不填则不使用。");
+            p.LinkNote("在 ", "https://fanyi-api.baidu.com", " 申请，标准版每月有免费额度。不填则不使用。",
+                "https://fanyi-api.baidu.com/manage/developer");
+            p.ButtonRow("", "测试百度翻译", delegate { TestEngine("baidu"); }, 150);
 
             p.Section("连通性测试");
-            p.ButtonRow("", "测试当前引擎", delegate { TestEngine(); }, 150);
+            p.ButtonRow("", "测试首选引擎", delegate { TestEngine(_c.Engine); }, 150);
             p.ButtonRow("", "打开配置文件夹", delegate
             {
                 try
@@ -67,10 +70,13 @@ namespace LiteTrans
         }
 
         /// <summary>用当前未保存的设置真正跑一次翻译，直接反馈结果</summary>
-        private void TestEngine()
+        private void TestEngine(string engine)
         {
             CommitEditors();
             var cfg = _c.Clone();
+            var requested = engine;
+            if (!string.IsNullOrWhiteSpace(requested)) cfg.Engine = requested;
+            if (requested == "ai") cfg.AiEnabled = true;
 
             var dlg = new Form
             {
@@ -98,20 +104,28 @@ namespace LiteTrans
                 Native.ApplyRoundCorners(dlg.Handle);
             };
 
-            ThreadPool.QueueUserWorkItem(delegate
+            dlg.Shown += delegate
             {
-                var r = Translator.Translate("Knowledge is power.", cfg);
-                try
+                ThreadPool.QueueUserWorkItem(delegate
                 {
-                    dlg.BeginInvoke((MethodInvoker)delegate
+                    var r = Translator.Translate("Knowledge is power.", cfg, false, requested);
+                    try
                     {
-                        lbl.Text = r.Ok
-                            ? "成功\n\n引擎：" + r.Engine + "\n耗时：" + r.ElapsedMs + " ms\n译文：" + r.Text
-                            : "失败\n\n" + (r.Error ?? "未知错误");
-                    });
-                }
-                catch { }
-            });
+                        dlg.BeginInvoke((MethodInvoker)delegate
+                        {
+                            var fallback = string.IsNullOrWhiteSpace(r.FallbackNotice)
+                                ? ""
+                                : "\n\n提示：" + r.FallbackNotice;
+                            var actual = string.IsNullOrWhiteSpace(r.Engine) ? "未返回" : r.Engine;
+                            lbl.Text = r.Ok && (string.IsNullOrWhiteSpace(requested) || r.Engine == requested)
+                                ? "成功\n\n引擎：" + actual + "\n耗时：" + r.ElapsedMs + " ms\n译文：" + r.Text + fallback
+                                : "失败\n\n请求引擎：" + (requested ?? cfg.Engine) + "\n"
+                                  + (r.Error ?? (r.FallbackNotice ?? "未返回目标引擎结果")) + fallback;
+                        });
+                    }
+                    catch { }
+                });
+            };
 
             dlg.ShowDialog(this);
         }
