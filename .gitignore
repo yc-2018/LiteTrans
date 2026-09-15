@@ -1,0 +1,51 @@
+# ---- 编译产物 ----
+# build.cmd 输出的可执行文件
+LiteTrans.exe
+*.exe
+*.pdb
+*.dll
+*.mdb
+
+# 编译中间目录
+bin/
+obj/
+[Bb]uild/
+Debug/
+Release/
+x64/
+x86/
+
+# ---- Visual Studio / Rider / VS Code ----
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+
+# ---- NuGet ----
+packages/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+
+# ---- 测试与覆盖率 ----
+[Tt]est[Rr]esult*/
+*.coverage
+*.coveragexml
+
+# ---- 运行时/本地数据（可能含用户配置、历史记录、日志） ----
+config.json
+history.json
+*.log
+logs/
+
+# ---- 操作系统 ----
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
