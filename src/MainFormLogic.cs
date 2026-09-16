@@ -217,6 +217,8 @@ namespace LiteTrans
                 BeginInvoke((MethodInvoker)delegate
                 {
                     if (seq != _reqSeq) return;
+                    // 首个完成结果出现后立即停掉加载动画，避免下一帧覆盖译文。
+                    StopLoadingDisplay();
                     _lastResults = results;
                     _last = FirstSuccessful(results);
                     RenderResults(results, true);

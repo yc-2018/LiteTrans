@@ -11,6 +11,7 @@ namespace LiteTrans
 
         private void BeginLoadingDisplay()
         {
+            _loadingActive = true;
             _loadingFrame = 0;
             _dst.Clear();
             _dst.ReadOnly = true;
@@ -22,7 +23,7 @@ namespace LiteTrans
 
         private void UpdateLoadingDisplay()
         {
-            if (_dst == null || _dst.IsDisposed) return;
+            if (!_loadingActive || _dst == null || _dst.IsDisposed) return;
             _loadingFrame = (_loadingFrame + 1) % LoadingFrames.Length;
             _dst.SelectAll();
             _dst.SelectedText = LoadingFrames[_loadingFrame];
@@ -32,6 +33,7 @@ namespace LiteTrans
 
         private void StopLoadingDisplay()
         {
+            _loadingActive = false;
             if (_loadingTimer != null) _loadingTimer.Stop();
         }
 

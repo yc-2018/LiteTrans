@@ -186,8 +186,57 @@ namespace LiteTrans
         private void Drag_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
+            var control = sender as Control;
+            var screenPoint = control == null ? Cursor.Position : control.PointToScreen(e.Location);
+            var hit = ResizeHitTest(PointToClient(screenPoint));
             Native.ReleaseCapture();
-            Native.SendMessage(Handle, 0xA1 /*WM_NCLBUTTONDOWN*/, (IntPtr)2 /*HTCAPTION*/, IntPtr.Zero);
+            Native.SendMessage(Handle, 0xA1 /*WM_NCLBUTTONDOWN*/,
+                (IntPtr)(hit == 1 ? 2 /*HTCAPTION*/ : hit), IntPtr.Zero);
+        }
+
+        private void EdgeResize_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            var control = sender as Control;
+            var screenPoint = control == null ? Cursor.Position : control.PointToScreen(e.Location);
+            var hit = ResizeHitTest(PointToClient(screenPoint));
+            if (hit == 1) return;
+            Native.ReleaseCapture();
+            Native.SendMessage(Handle, 0xA1 /*WM_NCLBUTTONDOWN*/, (IntPtr)hit, IntPtr.Zero);
+        }
+
+        private void EdgeResize_MouseMove(object sender, MouseEventArgs e)
+        {
+            var control = sender as Control;
+            if (control == null) return;
+            int hit = ResizeHitTest(PointToClient(control.PointToScreen(e.Location)));
+            if (hit == 12 || hit == 15) control.Cursor = Cursors.SizeNS;
+            else if (hit == 13 || hit == 17) control.Cursor = Cursors.SizeNWSE;
+            else if (hit == 14 || hit == 16) control.Cursor = Cursors.SizeNESW;
+            else control.Cursor = Cursors.Default;
+        }
+
+        private void EdgeResize_MouseLeave(object sender, EventArgs e)
+        {
+            var control = sender as Control;
+            if (control != null) control.Cursor = Cursors.Default;
+        }
+
+        private int ResizeHitTest(Point p)
+        {
+            const int grip = 9;
+            bool l = p.X <= grip, r = p.X >= ClientSize.Width - grip;
+            bool t = p.Y <= grip, b = p.Y >= ClientSize.Height - grip;
+
+            if (l && t) return 13;
+            if (r && t) return 14;
+            if (l && b) return 16;
+            if (r && b) return 17;
+            if (l) return 10;
+            if (r) return 11;
+            if (t) return 12;
+            if (b) return 15;
+            return 1;
         }
 
         protected override void WndProc(ref Message m)
@@ -200,19 +249,7 @@ namespace LiteTrans
                 if ((int)m.Result == 1 /*HTCLIENT*/)
                 {
                     var p = PointToClient(new Point(m.LParam.ToInt32()));
-                    // 无边框窗口需要自己提供缩放命中区。适当加宽后，上下边缘更容易拖动。
-                    const int grip = 9;
-                    bool l = p.X <= grip, r = p.X >= ClientSize.Width - grip;
-                    bool t = p.Y <= grip, b = p.Y >= ClientSize.Height - grip;
-
-                    if (l && t) m.Result = (IntPtr)13;
-                    else if (r && t) m.Result = (IntPtr)14;
-                    else if (l && b) m.Result = (IntPtr)16;
-                    else if (r && b) m.Result = (IntPtr)17;
-                    else if (l) m.Result = (IntPtr)10;
-                    else if (r) m.Result = (IntPtr)11;
-                    else if (t) m.Result = (IntPtr)12;
-                    else if (b) m.Result = (IntPtr)15;
+                    m.Result = (IntPtr)ResizeHitTest(p);
                 }
                 return;
             }

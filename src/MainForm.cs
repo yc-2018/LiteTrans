@@ -42,6 +42,7 @@ namespace LiteTrans
         private bool _syncingEnginePicker;
         private System.Windows.Forms.Timer _loadingTimer;
         private int _loadingFrame;
+        private bool _loadingActive;
 
         private readonly List<string> _engineKeys = new List<string>();
         private static readonly string[] ModeKeys = { "auto", "forward", "reverse" };
@@ -79,6 +80,8 @@ namespace LiteTrans
             // ——— 标题栏 ———
             _bar = new Panel { Dock = DockStyle.Top, Height = 40 };
             _bar.MouseDown += Drag_MouseDown;
+            _bar.MouseMove += EdgeResize_MouseMove;
+            _bar.MouseLeave += EdgeResize_MouseLeave;
 
             _title = new Label
             {
@@ -166,6 +169,9 @@ namespace LiteTrans
 
             // ——— 底部 ———
             _foot = new Panel { Dock = DockStyle.Bottom, Height = 44 };
+            _foot.MouseDown += EdgeResize_MouseDown;
+            _foot.MouseMove += EdgeResize_MouseMove;
+            _foot.MouseLeave += EdgeResize_MouseLeave;
             _engineLabel = new Label
             {
                 Text = "引擎",
