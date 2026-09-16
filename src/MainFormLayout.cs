@@ -28,10 +28,11 @@ namespace LiteTrans
             _btnClose.Location = new Point(right - _btnClose.Width, 6);
             _btnGear.Location = new Point(_btnClose.Left - _btnGear.Width - 2, 6);
             _btnPin.Location = new Point(_btnGear.Left - _btnPin.Width - 2, 6);
+            _btnAllEngines.Location = new Point(_btnPin.Left - _btnAllEngines.Width - 2, 6);
 
             // 翻译模式下拉框放在标题旁，右侧按钮不再承担方向切换。
             int modeLeft = _title.Right + 12;
-            int modeWidth = Math.Min(240, Math.Max(150, _btnPin.Left - modeLeft - 10));
+            int modeWidth = Math.Min(240, Math.Max(150, _btnAllEngines.Left - modeLeft - 10));
             _modePicker.SetBounds(modeLeft, 7, modeWidth, 26);
 
             int top = _bar.Height;
@@ -94,6 +95,9 @@ namespace LiteTrans
             _modePicker.ForeColor = t.Text;
             SyncModePicker();
 
+            _allEngines = C.TranslateAllEngines;
+            _btnAllEngines.Active = _allEngines;
+
             _status.ForeColor = t.SubText;
 
             _engineLabel.ForeColor = t.SubText;
@@ -129,7 +133,10 @@ namespace LiteTrans
 
             Invalidate(true);
             Relayout();
-            if (_last != null) RenderResult(_last);
+            if (_lastResults != null && _allEngines)
+                RenderResults(_lastResults, true);
+            else if (_last != null)
+                RenderResult(_last);
         }
 
         private string SafeFamily()

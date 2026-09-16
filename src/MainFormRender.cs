@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Collections.Generic;
 using System.Windows.Forms;
 
 namespace LiteTrans
@@ -37,6 +38,14 @@ namespace LiteTrans
         /// <summary>把译文、音标、分词性释义排进 RichTextBox，并做轻着色</summary>
         private void RenderResult(TransResult r)
         {
+            var one = new List<TransResult>();
+            if (r != null) one.Add(r);
+            RenderResults(one, false);
+        }
+
+        /// <summary>渲染单引擎或“全部引擎”结果；每个引擎独立显示成功/失败状态。</summary>
+        private void RenderResults(List<TransResult> results, bool allEngines)
+        {
             var t = Theme.Current;
             _dst.Clear();
             _dst.SuspendLayout();
@@ -45,19 +54,62 @@ namespace LiteTrans
             var small = new Font(baseFont.FontFamily, Math.Max(8f, baseFont.Size - 2.5f));
             var bold = new Font(baseFont.FontFamily, baseFont.Size, FontStyle.Bold);
 
-            if (!string.IsNullOrWhiteSpace(r.FallbackNotice))
+            if (results == null || results.Count == 0)
             {
-                Append("提示：" + r.FallbackNotice + "\n\n", small, t.Accent);
-            }
-
-            if (!r.Ok)
-            {
-                Append(r.Error ?? "翻译失败", baseFont, Color.FromArgb(224, 82, 74));
-                SetStatus("失败 · " + (r.Error ?? ""));
+                Append("没有可用的翻译引擎", baseFont, Color.FromArgb(224, 82, 74));
                 _dst.ResumeLayout();
+                SetStatus("没有可用的翻译引擎");
                 return;
             }
 
+            int success = 0;
+            for (int i = 0; i < results.Count; i++)
+            {
+                var r = results[i];
+                if (r == null) continue;
+                if (allEngines && results.Count > 1)
+                {
+                    if (i > 0) Append("\n\n", small, t.SubText);
+                    Append("【" + EngineName(r.Engine) + "】", bold, t.Accent);
+                    Append("\n", small, t.SubText);
+                }
+
+                if (!string.IsNullOrWhiteSpace(r.FallbackNotice))
+                    Append("提示：" + r.FallbackNotice + "\n\n", small, t.Accent);
+
+                if (!r.Ok)
+                {
+                    Append("失败：" + (r.Error ?? "翻译失败"), baseFont, Color.FromArgb(224, 82, 74));
+                    continue;
+                }
+                success++;
+                AppendResultBody(r, baseFont, small, t);
+            }
+
+            _dst.ResumeLayout();
+            _dst.SelectionStart = 0;
+            _dst.ScrollToCaret();
+
+            if (allEngines && results.Count > 1)
+            {
+                SetStatus("全部引擎 · 成功 " + success + "/" + results.Count
+                        + (_fromSelection ? " · 划词" : ""));
+            }
+            else
+            {
+                var r = results[0];
+                if (r == null || !r.Ok)
+                    SetStatus("失败 · " + ((r == null ? null : r.Error) ?? "翻译失败"));
+                else
+                    SetStatus(EngineName(r.Engine) + " · " + r.ElapsedMs + " ms"
+                        + (r.Dict.Count > 0 ? " · 含词典" : "")
+                        + (_fromSelection ? " · 划词" : "")
+                        + (string.IsNullOrWhiteSpace(r.FallbackNotice) ? "" : " · " + r.FallbackNotice));
+            }
+        }
+
+        private void AppendResultBody(TransResult r, Font baseFont, Font small, Theme t)
+        {
             // 音标
             if (!string.IsNullOrEmpty(r.PhoneticUk) || !string.IsNullOrEmpty(r.PhoneticUs))
             {
@@ -72,7 +124,7 @@ namespace LiteTrans
             Append(r.Text, baseFont, t.Text);
 
             // 词典释义
-            if (r.Dict.Count > 0)
+            if (r.Dict != null && r.Dict.Count > 0)
             {
                 Append("\n\n", small, t.SubText);
                 Append("词典释义\n", small, t.Accent);
@@ -85,15 +137,6 @@ namespace LiteTrans
                     Append(d.Mean + "\n", small, t.Text);
                 }
             }
-
-            _dst.ResumeLayout();
-            _dst.SelectionStart = 0;
-            _dst.ScrollToCaret();
-
-            SetStatus(EngineName(r.Engine) + " · " + r.ElapsedMs + " ms"
-                    + (r.Dict.Count > 0 ? " · 含词典" : "")
-                    + (_fromSelection ? " · 划词" : "")
-                    + (string.IsNullOrWhiteSpace(r.FallbackNotice) ? "" : " · " + r.FallbackNotice));
         }
 
         private void Append(string text, Font font, Color color)

@@ -18,6 +18,9 @@ namespace LiteTrans
         private Label _hint;
         private readonly string _initialTranslationMode;
         private bool _translationModeTouched;
+        private const int TranslateTabIndex = 3;
+        private ComboBox _preferredEnginePicker;
+        private List<KeyValuePair<string, string>> _preferredEngineOptions;
 
         public SettingsForm(TrayApp app)
         {
@@ -136,6 +139,14 @@ namespace LiteTrans
 
         private void SelectTab(int index)
         {
+            if (index == TranslateTabIndex && _preferredEnginePicker != null)
+            {
+                // 高级接口页可能刚新增、删除或重命名了 AI 配置。
+                // 先写入编辑副本，再原地刷新首选引擎选项。
+                CommitEditors();
+                RefreshPreferredEngineOptions();
+            }
+
             for (int i = 0; i < _pages.Count; i++)
             {
                 _pages[i].Visible = i == index;

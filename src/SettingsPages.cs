@@ -87,11 +87,11 @@ namespace LiteTrans
             p.Note("例：目标=简体中文、反向=英语时，英文译成中文，中文则译成英文。主窗口左上角可直接选择自动判断或固定译入语言。");
 
             p.Section("引擎");
-            p.Combo("首选引擎", "Engine",
-                Opt("transmart", "腾讯翻译（免密钥，推荐）", "ai", "AI 精翻（需配置）", "baidu", "百度翻译（需密钥）"), 260);
+            _preferredEngineOptions = CreatePreferredEngineOptions();
+            _preferredEnginePicker = p.Combo("首选引擎", "Engine", _preferredEngineOptions, 260);
             p.Switch("单词词典增强", "DictEnhance", "查单词时附带音标和分词性释义");
             p.TextField("请求超时（毫秒）", "TimeoutMs", 110);
-            p.Note("任一引擎失败会自动回退到腾讯翻译，因此始终可用。");
+            p.Note("任一引擎失败会自动回退到腾讯翻译，因此始终可用。主窗口标题栏的多引擎按钮可同时请求所有已配置引擎。");
 
             p.Section("剪贴板文本预处理");
             p.Switch("驼峰命名拆词", "SplitCamel", "getUserName → get User Name");
@@ -99,6 +99,61 @@ namespace LiteTrans
             p.Switch("合并多余空白", "CollapseSpaces");
             p.Switch("接合排版换行", "JoinLineBreaks", "修复 PDF 复制出来的断行");
             p.Switch("去除注释符号", "StripCodeComment", "剥掉行首的 // # * 等");
+        }
+
+        private List<KeyValuePair<string, string>> CreatePreferredEngineOptions()
+        {
+            _c.NormalizeAiProviders();
+            if (string.Equals(_c.Engine, "ai", StringComparison.OrdinalIgnoreCase))
+                _c.Engine = Config.AiEngineKey(_c.FindAiProvider("ai"));
+
+            var options = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("transmart", "腾讯翻译（免密钥，推荐）"),
+                new KeyValuePair<string, string>("baidu", "百度翻译（需密钥）")
+            };
+            foreach (var provider in _c.AiProviders)
+            {
+                var key = Config.AiEngineKey(provider);
+                var label = string.IsNullOrWhiteSpace(provider.Name) ? "AI 精翻" : provider.Name;
+                if (!provider.Enabled) label += "（未启用）";
+                else if (string.IsNullOrWhiteSpace(provider.Key) ||
+                         string.IsNullOrWhiteSpace(provider.BaseUrl) ||
+                         string.IsNullOrWhiteSpace(provider.Model)) label += "（未配置）";
+                options.Add(new KeyValuePair<string, string>(key, label));
+            }
+
+            bool knownEngine = false;
+            foreach (var option in options)
+                if (string.Equals(option.Key, _c.Engine, StringComparison.OrdinalIgnoreCase)) { knownEngine = true; break; }
+            if (!knownEngine && !string.IsNullOrWhiteSpace(_c.Engine))
+                options.Add(new KeyValuePair<string, string>(_c.Engine, Translator.EngineDisplay(_c.Engine, _c)));
+            return options;
+        }
+
+        private void RefreshPreferredEngineOptions()
+        {
+            if (_preferredEnginePicker == null || _preferredEngineOptions == null) return;
+
+            var refreshed = CreatePreferredEngineOptions();
+            _preferredEngineOptions.Clear();
+            foreach (var option in refreshed) _preferredEngineOptions.Add(option);
+
+            _preferredEnginePicker.BeginUpdate();
+            try
+            {
+                _preferredEnginePicker.Items.Clear();
+                int selected = -1;
+                for (int i = 0; i < _preferredEngineOptions.Count; i++)
+                {
+                    var option = _preferredEngineOptions[i];
+                    _preferredEnginePicker.Items.Add(option.Value);
+                    if (string.Equals(option.Key, _c.Engine, StringComparison.OrdinalIgnoreCase)) selected = i;
+                }
+                if (selected < 0 && _preferredEnginePicker.Items.Count > 0) selected = 0;
+                _preferredEnginePicker.SelectedIndex = selected;
+            }
+            finally { _preferredEnginePicker.EndUpdate(); }
         }
 
         private static List<KeyValuePair<string, string>> FontOptions()

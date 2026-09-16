@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -37,13 +39,8 @@ namespace LiteTrans
         private void PageAdvanced(PageBuilder p)
         {
             p.Section("AI 精翻（OpenAI 兼容接口）");
-            p.Switch("启用 AI 精翻", "AiEnabled", "长句、术语和语境表现更好");
-            p.TextField("接口地址", "AiBaseUrl", 350);
-            p.TextField("API Key", "AiKey", 350, true);
-            p.TextField("模型名称", "AiModel", 220);
-            p.TextField("系统提示词", "AiPrompt", 350);
-            p.Note("地址填到 /v1 即可，程序自动补 /chat/completions；{target} 会替换为目标语言。");
-            p.ButtonRow("", "测试 AI 接口", delegate { TestEngine("ai"); }, 150);
+            p.Note("可添加多个接口并自定义名称。地址填到 /v1 即可，程序自动补 /chat/completions；{target} 会替换为目标语言。启用的接口会出现在主窗口引擎列表中。");
+            BuildAiProviders(p);
 
             p.Section("百度翻译开放平台");
             p.TextField("APP ID", "BaiduAppId", 220);
@@ -69,6 +66,79 @@ namespace LiteTrans
             }, 150);
         }
 
+        private void BuildAiProviders(PageBuilder p)
+        {
+            _c.NormalizeAiProviders();
+            var host = new Panel
+            {
+                Width = 596,
+                Height = 590,
+                AutoScroll = true,
+                BackColor = Theme.Current.Bg,
+            };
+            var list = new FlowLayoutPanel
+            {
+                Location = new Point(0, 38),
+                Width = 570,
+                Height = 530,
+                AutoScroll = false,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
+                BackColor = Theme.Current.Bg,
+            };
+            var editors = new List<AiProviderEditor>();
+            var add = new FlatBtn { Text = "新增 AI 配置", Size = new Size(130, 29), Location = new Point(0, 2) };
+            host.Controls.Add(add);
+            host.Controls.Add(list);
+
+            Action rebuild = null;
+            rebuild = delegate
+            {
+                while (list.Controls.Count > 0)
+                {
+                    var child = list.Controls[list.Controls.Count - 1];
+                    list.Controls.RemoveAt(list.Controls.Count - 1);
+                    child.Dispose();
+                }
+                editors.Clear();
+                foreach (var provider in _c.AiProviders)
+                {
+                    var editor = new AiProviderEditor(provider);
+                    editor.TestRequested += delegate { CommitEditors(); TestEngine(Config.AiEngineKey(provider)); };
+                    editor.RemoveRequested += delegate
+                    {
+                        CommitEditors();
+                        _c.AiProviders.Remove(provider);
+                        rebuild();
+                    };
+                    editors.Add(editor);
+                    list.Controls.Add(editor);
+                }
+                list.Height = Math.Max(530, editors.Count * 245 + 8);
+                host.AutoScrollMinSize = new Size(0, list.Top + list.Height + 8);
+            };
+
+            add.Click += delegate
+            {
+                CommitEditors();
+                _c.AiProvidersInitialized = true;
+                _c.AiProviders.Add(new AiProviderConfig
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Name = "AI 配置 " + (_c.AiProviders.Count + 1),
+                    Enabled = true,
+                });
+                rebuild();
+            };
+            rebuild();
+            p.AddControl(host, 600, 8);
+            p.AddCommit(delegate
+            {
+                foreach (var editor in editors) editor.Commit();
+                _c.NormalizeAiProviders();
+            });
+        }
+
         /// <summary>用当前未保存的设置真正跑一次翻译，直接反馈结果</summary>
         private void TestEngine(string engine)
         {
@@ -76,7 +146,11 @@ namespace LiteTrans
             var cfg = _c.Clone();
             var requested = string.IsNullOrWhiteSpace(engine) ? _c.Engine : engine;
             if (!string.IsNullOrWhiteSpace(requested)) cfg.Engine = requested;
-            if (requested == "ai") cfg.AiEnabled = true;
+            if (requested == "ai" || (requested ?? "").StartsWith("ai:", StringComparison.OrdinalIgnoreCase))
+            {
+                var provider = cfg.FindAiProvider(requested);
+                if (provider != null) provider.Enabled = true;
+            }
 
             var dlg = new Form
             {
@@ -128,6 +202,63 @@ namespace LiteTrans
             };
 
             dlg.ShowDialog(this);
+        }
+    }
+
+    /// <summary>单个 AI 接口的可编辑卡片。</summary>
+    internal sealed class AiProviderEditor : Panel
+    {
+        private readonly AiProviderConfig _provider;
+        private readonly TextBox _name, _url, _key, _model, _prompt;
+        private readonly Toggle _enabled;
+        public event EventHandler TestRequested;
+        public event EventHandler RemoveRequested;
+
+        public AiProviderEditor(AiProviderConfig provider)
+        {
+            _provider = provider;
+            Width = 548;
+            Height = 236;
+            Margin = new Padding(0, 0, 0, 8);
+            BackColor = Theme.Current.Card;
+            BorderStyle = BorderStyle.FixedSingle;
+
+            _name = Field("名称", provider.Name, 8, 8, 310);
+            _url = Field("接口地址", provider.BaseUrl, 8, 42, 510);
+            _key = Field("API Key", provider.Key, 8, 76, 510, true);
+            _model = Field("模型", provider.Model, 8, 110, 510);
+            _prompt = Field("提示词", provider.Prompt, 8, 144, 510);
+
+            var enableLabel = new Label { Text = "启用", AutoSize = true, Location = new Point(342, 13), ForeColor = Theme.Current.Text, BackColor = Color.Transparent };
+            _enabled = new Toggle { Location = new Point(382, 10), Checked = provider.Enabled };
+            Controls.Add(enableLabel);
+            Controls.Add(_enabled);
+
+            var test = new FlatBtn { Text = "测试", Size = new Size(70, 27), Location = new Point(8, 197) };
+            test.Click += delegate { if (TestRequested != null) TestRequested(this, EventArgs.Empty); };
+            var remove = new FlatBtn { Text = "删除", Size = new Size(70, 27), Location = new Point(86, 197) };
+            remove.Click += delegate { if (RemoveRequested != null) RemoveRequested(this, EventArgs.Empty); };
+            Controls.Add(test);
+            Controls.Add(remove);
+        }
+
+        private TextBox Field(string label, string value, int x, int y, int width, bool password = false)
+        {
+            var l = new Label { Text = label, AutoSize = false, Size = new Size(74, 25), Location = new Point(x, y + 3), ForeColor = Theme.Current.Text, BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft };
+            var tb = new TextBox { BorderStyle = BorderStyle.FixedSingle, Location = new Point(x + 80, y), Width = width - 80, Height = 25, Text = value ?? "", BackColor = Theme.Current.Bg, ForeColor = Theme.Current.Text, UseSystemPasswordChar = password };
+            Controls.Add(l);
+            Controls.Add(tb);
+            return tb;
+        }
+
+        public void Commit()
+        {
+            _provider.Name = (_name.Text ?? "").Trim();
+            _provider.BaseUrl = (_url.Text ?? "").Trim();
+            _provider.Key = (_key.Text ?? "").Trim();
+            _provider.Model = (_model.Text ?? "").Trim();
+            _provider.Prompt = _prompt.Text ?? "";
+            _provider.Enabled = _enabled.Checked;
         }
     }
 }

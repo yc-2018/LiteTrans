@@ -89,29 +89,6 @@ namespace LiteTrans
             m.Items.Add(hist);
             m.Items.Add(new ToolStripSeparator());
 
-            var auto = new ToolStripMenuItem("开机自启") { Checked = Startup.IsEnabled(), CheckOnClick = true };
-            auto.Click += delegate
-            {
-                var requested = auto.Checked;
-                Startup.Set(requested);
-                var actual = Startup.IsEnabled();
-                auto.Checked = actual;
-                Cfg.AutoStart = actual;
-                if (actual != requested)
-                {
-                    MessageBox.Show("开机自启状态未能更新，可能被安全软件拦截。", "轻译",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-                else
-                {
-                    _tray.ShowBalloonTip(2500, "开机自启",
-                        actual ? "已开启，登录 Windows 后会自动运行。" : "已关闭，不再随 Windows 自动运行。",
-                        ToolTipIcon.Info);
-                }
-                Cfg.Save();
-            };
-            m.Items.Add(auto);
-
             m.Items.Add(Item("设置…", delegate { ShowSettings(); }));
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add(Item("退出", delegate { ExitApp(); }));

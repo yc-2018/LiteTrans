@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
@@ -139,36 +140,118 @@ namespace LiteTrans
             _btnTrans.Enabled = false;
             _btnTrans.Text = "翻译中";
             BeginLoadingDisplay();
-            SetStatus("正在请求 " + EngineName(C.Engine) + " …");
+            SetStatus(_allEngines ? "正在请求全部已配置引擎 …" : "正在请求 " + EngineName(C.Engine) + " …");
 
             var cfgSnapshot = C.Clone();
-            ThreadPool.QueueUserWorkItem(delegate
+            bool allEngines = _allEngines;
+            if (allEngines)
             {
-                TransResult r;
-                try { r = Translator.Translate(text, cfgSnapshot); }
-                catch (Exception ex) { r = new TransResult { Source = text, Error = Http.DescribeError(ex) }; }
-
-                if (seq != _reqSeq) return;               // 已有更新的请求，丢弃
-                try
+                var engines = OrderedEngineKeys(cfgSnapshot);
+                var batch = new TransResult[engines.Count];
+                if (engines.Count == 0)
                 {
-                    BeginInvoke((MethodInvoker)delegate
+                    CompleteTranslation(seq, new List<TransResult>(), true);
+                    return;
+                }
+
+                int pending = engines.Count;
+                for (int i = 0; i < engines.Count; i++)
+                {
+                    int index = i;
+                    string engine = engines[i];
+                    ThreadPool.QueueUserWorkItem(delegate
                     {
-                        if (seq != _reqSeq) return;
-                        _btnTrans.Enabled = true;
-                        _btnTrans.Text = "翻译";
-                        StopLoadingDisplay();
-                        _last = r;
-                        RenderResult(r);
-                        AfterTranslate(r);
+                        try
+                        {
+                            // Each request gets its own clone because normalization assigns
+                            // provider IDs and must not mutate another request's snapshot.
+                            var localCfg = cfgSnapshot.Clone();
+                            var item = Translator.TranslateWithEngine(text, localCfg, engine);
+                            if (string.IsNullOrWhiteSpace(item.Engine)) item.Engine = engine;
+                            batch[index] = item;
+                        }
+                        catch (Exception ex)
+                        {
+                            batch[index] = new TransResult
+                            {
+                                Source = text,
+                                TgtLang = Translator.DecideTarget(text, cfgSnapshot),
+                                Engine = engine,
+                                Error = Http.DescribeError(ex)
+                            };
+                        }
+                        finally
+                        {
+                            if (Interlocked.Decrement(ref pending) == 0)
+                            {
+                                var results = new List<TransResult>(batch);
+                                CompleteTranslation(seq, results, true);
+                            }
+                        }
                     });
                 }
-                catch { }
+                return;
+            }
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                TransResult item;
+                try { item = Translator.Translate(text, cfgSnapshot); }
+                catch (Exception ex) { item = new TransResult { Source = text, Error = Http.DescribeError(ex) }; }
+                var results = new List<TransResult> { item };
+                CompleteTranslation(seq, results, false);
             });
+        }
+
+        private void CompleteTranslation(int seq, List<TransResult> results, bool allEngines)
+        {
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (seq != _reqSeq) return;           // 已有更新的请求，丢弃
+                    _btnTrans.Enabled = true;
+                    _btnTrans.Text = "翻译";
+                    StopLoadingDisplay();
+                    _lastResults = results;
+                    _last = FirstSuccessful(results);
+                    RenderResults(results, allEngines);
+                    AfterTranslate(_last);
+                });
+            }
+            catch { }
+        }
+
+        /// <summary>按首选引擎优先排列，随后补上全部已配置引擎。</summary>
+        private List<string> OrderedEngineKeys(Config cfg)
+        {
+            var list = Translator.GetConfiguredEngineKeys(cfg);
+            var preferred = cfg.Engine;
+            if (string.IsNullOrWhiteSpace(preferred)) return list;
+
+            int index = -1;
+            for (int i = 0; i < list.Count; i++)
+                if (string.Equals(list[i], preferred, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
+            if (index > 0)
+            {
+                var item = list[index];
+                list.RemoveAt(index);
+                list.Insert(0, item);
+            }
+            return list;
+        }
+
+        private static TransResult FirstSuccessful(List<TransResult> results)
+        {
+            if (results == null) return null;
+            foreach (var result in results)
+                if (result != null && result.Ok) return result;
+            return results.Count > 0 ? results[0] : null;
         }
 
         private void AfterTranslate(TransResult r)
         {
-            if (!r.Ok) return;
+            if (r == null || !r.Ok) return;
 
             if (C.AutoCopyResult)
             {
@@ -187,14 +270,9 @@ namespace LiteTrans
             _status.Text = s;
         }
 
-        private static string EngineName(string e)
+        private string EngineName(string e)
         {
-            switch (e)
-            {
-                case "ai": return "AI 精翻";
-                case "baidu": return "百度翻译";
-                default: return "腾讯翻译";
-            }
+            return Translator.EngineDisplay(e, C);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -15,7 +16,7 @@ namespace LiteTrans
         private Panel _bar;
         private Label _title;
         private ComboBox _modePicker;
-        private IconBtn _btnPin, _btnGear, _btnClose;
+        private IconBtn _btnAllEngines, _btnPin, _btnGear, _btnClose;
 
         // 内容
         private Card _srcCard, _dstCard;
@@ -34,19 +35,21 @@ namespace LiteTrans
         private bool _relayouting;           // 防止布局与内容重排互相触发
         private int _reqSeq;                 // 请求序号，丢弃过期响应
         private TransResult _last;
+        private List<TransResult> _lastResults;
         private bool _fromSelection;         // 本次内容是否来自划词抓取
+        private bool _allEngines;
         private bool _syncingModePicker;
         private bool _syncingEnginePicker;
         private System.Windows.Forms.Timer _loadingTimer;
         private int _loadingFrame;
 
-        private static readonly string[] EngineKeys = { "transmart", "ai", "baidu" };
-        private static readonly string[] EngineLabels = { "腾讯翻译", "AI 精翻", "百度翻译" };
+        private readonly List<string> _engineKeys = new List<string>();
         private static readonly string[] ModeKeys = { "auto", "forward", "reverse" };
 
         public MainForm(TrayApp app)
         {
             _app = app;
+            _allEngines = C.TranslateAllEngines;
             BuildUi();
             ApplyTheme();
         }
@@ -104,6 +107,17 @@ namespace LiteTrans
             _btnPin = new IconBtn { Kind = "pin", Tip = "窗口置顶" };
             _btnGear = new IconBtn { Kind = "gear", Tip = "设置" };
             _btnClose = new IconBtn { Kind = "close", Tip = "收回托盘 (Esc)" };
+            _btnAllEngines = new IconBtn { Kind = "all", Tip = "全部已配置引擎翻译" };
+
+            _btnAllEngines.Click += (s, e) =>
+            {
+                _allEngines = !_allEngines;
+                C.TranslateAllEngines = _allEngines;
+                C.Save();
+                _btnAllEngines.Active = _allEngines;
+                SetStatus(_allEngines ? "已开启全部引擎翻译" : "已切换为首选引擎翻译");
+                if (!string.IsNullOrWhiteSpace(_src.Text)) TranslateNow(_src.Text);
+            };
 
             _btnPin.Click += (s, e) =>
             {
@@ -115,7 +129,7 @@ namespace LiteTrans
             _btnGear.Click += (s, e) => _app.ShowSettings();
             _btnClose.Click += (s, e) => HideToTray();
 
-            _bar.Controls.AddRange(new Control[] { _title, _modePicker, _btnPin, _btnGear, _btnClose });
+            _bar.Controls.AddRange(new Control[] { _title, _modePicker, _btnAllEngines, _btnPin, _btnGear, _btnClose });
 
             // ——— 原文 ———
             _srcCard = new Card();
@@ -168,8 +182,8 @@ namespace LiteTrans
                 Size = new Size(126, 26),
                 Font = new Font("Microsoft YaHei UI", 8.5f),
                 FormattingEnabled = true,
+                DropDownWidth = 220,
             };
-            for (int i = 0; i < EngineLabels.Length; i++) _enginePicker.Items.Add(EngineLabels[i]);
             _enginePicker.SelectedIndexChanged += EnginePicker_SelectedIndexChanged;
 
             _status = new Label
@@ -241,9 +255,9 @@ namespace LiteTrans
         private void EnginePicker_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_syncingEnginePicker || _enginePicker.SelectedIndex < 0 ||
-                _enginePicker.SelectedIndex >= EngineKeys.Length) return;
+                _enginePicker.SelectedIndex >= _engineKeys.Count) return;
 
-            var engine = EngineKeys[_enginePicker.SelectedIndex];
+            var engine = _engineKeys[_enginePicker.SelectedIndex];
             if (C.Engine == engine) return;
 
             C.Engine = engine;
@@ -260,10 +274,29 @@ namespace LiteTrans
             _syncingEnginePicker = true;
             try
             {
+                C.NormalizeAiProviders();
+                var preferred = C.Engine;
+                if (string.Equals(preferred, "ai", StringComparison.OrdinalIgnoreCase))
+                    preferred = Config.AiEngineKey(C.FindAiProvider("ai"));
+                if (string.IsNullOrWhiteSpace(preferred)) preferred = "transmart";
+
+                var keys = Translator.GetConfiguredEngineKeys(C);
+                bool hasPreferred = false;
+                foreach (var key in keys)
+                    if (string.Equals(key, preferred, StringComparison.OrdinalIgnoreCase)) { hasPreferred = true; break; }
+                if (!hasPreferred) keys.Add(preferred);
+                _engineKeys.Clear();
+                _engineKeys.AddRange(keys);
+
+                _enginePicker.BeginUpdate();
+                _enginePicker.Items.Clear();
+                foreach (var key in _engineKeys)
+                    _enginePicker.Items.Add(Translator.EngineDisplay(key, C));
                 int index = 0;
-                for (int i = 0; i < EngineKeys.Length; i++)
-                    if (EngineKeys[i] == C.Engine) { index = i; break; }
+                for (int i = 0; i < _engineKeys.Count; i++)
+                    if (string.Equals(_engineKeys[i], preferred, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
                 if (_enginePicker.SelectedIndex != index) _enginePicker.SelectedIndex = index;
+                _enginePicker.EndUpdate();
             }
             finally { _syncingEnginePicker = false; }
         }

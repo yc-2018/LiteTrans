@@ -25,6 +25,22 @@ namespace LiteTrans
             _p = panel; _c = cfg; _commits = commits;
         }
 
+        /// <summary>给复杂设置控件预留一块可滚动区域。</summary>
+        public void AddControl(Control control, int height, int margin = 10)
+        {
+            if (control == null) return;
+            control.Location = new Point(0, _y);
+            control.Width = Math.Max(control.Width, 596);
+            control.Height = height;
+            _p.Controls.Add(control);
+            _y += height + margin;
+        }
+
+        public void AddCommit(Action commit)
+        {
+            if (commit != null) _commits.Add(commit);
+        }
+
         private FieldInfo F(string name)
         {
             var f = typeof(Config).GetField(name);

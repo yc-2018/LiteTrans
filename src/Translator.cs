@@ -61,10 +61,12 @@ namespace LiteTrans
 
             // 主引擎（失败则依次回退）
             var requested = string.IsNullOrWhiteSpace(requestedEngine) ? c.Engine : requestedEngine;
+            // 旧版使用 "ai"，统一为第一项配置的稳定 ai:<id>，保证结果和历史记录能识别具体接口。
+            requested = NormalizeEngineKey(requested, c);
             bool requestedConfigured = IsEngineConfigured(requested, c);
             if (!allowFallback && !requestedConfigured)
             {
-                r.Error = MissingConfigNotice(requested, null);
+                r.Error = MissingConfigNotice(requested, null, c);
                 r.ElapsedMs = (int)sw.ElapsedMilliseconds;
                 return r;
             }
@@ -81,9 +83,14 @@ namespace LiteTrans
                 {
                     switch (eng)
                     {
-                        case "ai": Ai(text, r, c); break;
+                        case "ai": Ai(text, r, c, c.FindAiProvider(eng)); break;
                         case "baidu": Baidu(text, r, c); break;
-                        default: Transmart(text, r, c); break;
+                        default:
+                            if (eng.StartsWith("ai:", StringComparison.OrdinalIgnoreCase))
+                                Ai(text, r, c, c.FindAiProvider(eng));
+                            else
+                                Transmart(text, r, c);
+                            break;
                     }
                     if (r.Ok)
                     {
@@ -92,8 +99,8 @@ namespace LiteTrans
                         if (eng != requested)
                         {
                             r.FallbackNotice = requestedConfigured
-                                ? "首选引擎不可用，已自动切换到" + EngineDisplay(eng)
-                                : MissingConfigNotice(requested, eng);
+                                ? "首选引擎不可用，已自动切换到" + EngineDisplay(eng, c)
+                                : MissingConfigNotice(requested, eng, c);
                         }
                         break;
                     }
@@ -109,7 +116,7 @@ namespace LiteTrans
 
             if (!r.Ok && string.IsNullOrEmpty(r.Error)) r.Error = "所有翻译引擎均未返回结果";
             if (!r.Ok && !requestedConfigured)
-                r.FallbackNotice = MissingConfigNotice(requested, null);
+                r.FallbackNotice = MissingConfigNotice(requested, null, c);
             r.ElapsedMs = (int)sw.ElapsedMilliseconds;
             return r;
         }
@@ -125,40 +132,75 @@ namespace LiteTrans
             r.Error = null;
         }
 
-        private static bool IsEngineConfigured(string engine, Config c)
+        public static bool IsEngineConfigured(string engine, Config c)
         {
             if (engine == "baidu")
                 return !string.IsNullOrWhiteSpace(c.BaiduAppId) && !string.IsNullOrWhiteSpace(c.BaiduKey);
-            if (engine == "ai")
-                return c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey) &&
-                       !string.IsNullOrWhiteSpace(c.AiBaseUrl);
+            if (engine == "ai" || (engine ?? "").StartsWith("ai:", StringComparison.OrdinalIgnoreCase))
+            {
+                var provider = c.FindAiProvider(engine);
+                return provider != null && provider.Enabled &&
+                       !string.IsNullOrWhiteSpace(provider.Key) &&
+                       !string.IsNullOrWhiteSpace(provider.BaseUrl) &&
+                       !string.IsNullOrWhiteSpace(provider.Model);
+            }
             return engine == "transmart" || string.IsNullOrWhiteSpace(engine);
         }
 
-        private static string MissingConfigNotice(string engine, string actual)
+        private static string MissingConfigNotice(string engine, string actual, Config c = null)
         {
-            string name = engine == "baidu" ? "百度翻译" : engine == "ai" ? "AI 精翻" : EngineDisplay(engine);
+            string name = EngineDisplay(engine, c);
             if (string.IsNullOrEmpty(actual)) return name + "未配置，当前未使用该引擎";
-            return name + "未配置，已自动切换到" + EngineDisplay(actual);
+            return name + "未配置，已自动切换到" + EngineDisplay(actual, c);
         }
 
         private static List<string> BuildChain(Config c)
         {
             var list = new List<string>();
-            if (c.Engine == "ai" && c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey) && !string.IsNullOrWhiteSpace(c.AiBaseUrl)) list.Add("ai");
-            else if (c.Engine == "baidu" && !string.IsNullOrWhiteSpace(c.BaiduAppId) && !string.IsNullOrWhiteSpace(c.BaiduKey)) list.Add("baidu");
+            if (IsEngineConfigured(c.Engine, c)) list.Add(NormalizeEngineKey(c.Engine, c));
 
             if (!list.Contains("transmart")) list.Add("transmart");      // 免密钥主力，永远兜底
-            if (!list.Contains("baidu") && !string.IsNullOrWhiteSpace(c.BaiduAppId) && !string.IsNullOrWhiteSpace(c.BaiduKey)) list.Add("baidu");
-            if (!list.Contains("ai") && c.AiEnabled && !string.IsNullOrWhiteSpace(c.AiKey) && !string.IsNullOrWhiteSpace(c.AiBaseUrl)) list.Add("ai");
+            if (!list.Contains("baidu") && IsEngineConfigured("baidu", c)) list.Add("baidu");
+            foreach (var engine in GetConfiguredEngineKeys(c))
+                if (!list.Contains(engine)) list.Add(engine);
             return list;
         }
 
-        private static string EngineDisplay(string engine)
+        /// <summary>返回当前已启用且配置完整的引擎标识；腾讯翻译始终可用。</summary>
+        public static List<string> GetConfiguredEngineKeys(Config c)
         {
-            if (engine == "ai") return "AI 精翻";
+            var list = new List<string> { "transmart" };
+            if (IsEngineConfigured("baidu", c)) list.Add("baidu");
+            c.NormalizeAiProviders();
+            foreach (var provider in c.AiProviders)
+            {
+                var key = Config.AiEngineKey(provider);
+                if (IsEngineConfigured(key, c)) list.Add(key);
+            }
+            return list;
+        }
+
+        /// <summary>对指定引擎执行一次翻译，不自动回退。</summary>
+        public static TransResult TranslateWithEngine(string raw, Config c, string engine)
+        {
+            return Translate(raw, c, false, engine);
+        }
+
+        public static string EngineDisplay(string engine, Config c = null)
+        {
             if (engine == "baidu") return "百度翻译";
+            if (engine == "ai" || (engine ?? "").StartsWith("ai:", StringComparison.OrdinalIgnoreCase))
+            {
+                var provider = c == null ? null : c.FindAiProvider(engine);
+                return provider == null || string.IsNullOrWhiteSpace(provider.Name) ? "AI 精翻" : provider.Name;
+            }
             return "腾讯翻译";
+        }
+
+        private static string NormalizeEngineKey(string engine, Config c)
+        {
+            if (!string.Equals(engine, "ai", StringComparison.OrdinalIgnoreCase)) return engine;
+            return Config.AiEngineKey(c.FindAiProvider(engine));
         }
 
         // ================== 腾讯交互翻译（免密钥） ==================
@@ -261,25 +303,26 @@ namespace LiteTrans
         }
 
         // ================== AI 精翻（任意 OpenAI 兼容接口） ==================
-        private static void Ai(string text, TransResult r, Config c)
+        private static void Ai(string text, TransResult r, Config c, AiProviderConfig provider)
         {
+            if (provider == null) throw new Exception("AI 配置不存在");
             var langName = Lang.DisplayName(r.TgtLang);
-            var sys = (c.AiPrompt ?? "").Replace("{target}", langName);
+            var sys = (provider.Prompt ?? "").Replace("{target}", langName);
             if (string.IsNullOrWhiteSpace(sys)) sys = "把文本翻译为" + langName + "，只输出译文。";
 
             var payload = Json.Stringify(new Dictionary<string, object> {
-                { "model", c.AiModel },
+                { "model", provider.Model },
                 { "temperature", 0.2 },
                 { "messages", new List<object> {
                     new Dictionary<string,object>{ {"role","system"}, {"content", sys} },
                     new Dictionary<string,object>{ {"role","user"},   {"content", text} } } }
             });
 
-            var url = (c.AiBaseUrl ?? "").TrimEnd('/');
+            var url = (provider.BaseUrl ?? "").TrimEnd('/');
             if (!url.EndsWith("/chat/completions")) url += "/chat/completions";
 
             var h = new WebHeaderCollection();
-            h["Authorization"] = "Bearer " + c.AiKey;
+            h["Authorization"] = "Bearer " + provider.Key;
 
             // AI 端点可能在境外，这里允许走系统代理
             var resp = Http.PostJson(url, payload, Math.Max(c.TimeoutMs, 30000), h, true);

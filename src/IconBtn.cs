@@ -8,9 +8,10 @@ namespace LiteTrans
     /// <summary>标题栏/工具栏用的矢量图标按钮，图形全部代码绘制</summary>
     public class IconBtn : Control
     {
-        public string Kind = "close";      // close | min | gear | pin | swap | copy | speak
+        public string Kind = "close";      // close | min | gear | pin | swap | all | copy | speak
         public string Tip;
         private bool _hover, _down, _active;
+        private ToolTip _toolTip;
 
         /// <summary>选中态（如置顶已开启）；赋值即重绘，防止界面与配置脱节</summary>
         public bool Active
@@ -31,6 +32,22 @@ namespace LiteTrans
                    | ControlStyles.SupportsTransparentBackColor, true);
             Size = new Size(32, 28);
             Cursor = Cursors.Hand;
+        }
+
+        protected override void OnCreateControl()
+        {
+            base.OnCreateControl();
+            if (!string.IsNullOrWhiteSpace(Tip))
+            {
+                _toolTip = new ToolTip();
+                _toolTip.SetToolTip(this, Tip);
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _toolTip != null) _toolTip.Dispose();
+            base.Dispose(disposing);
         }
 
         protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
@@ -91,6 +108,12 @@ namespace LiteTrans
                         g.DrawLine(p, cx + 2.2f, cy - 5.5f, cx + 5, cy - 2.5f);
                         g.DrawLine(p, cx + 5, cy + 2.5f, cx - 5, cy + 2.5f);
                         g.DrawLine(p, cx - 2.2f, cy + 5.5f, cx - 5, cy + 2.5f);
+                        break;
+                    case "all":
+                        // 多引擎：三条等长结果线，保持标题栏图标清晰。
+                        g.DrawLine(p, cx - 5, cy - 4.5f, cx + 5, cy - 4.5f);
+                        g.DrawLine(p, cx - 5, cy, cx + 5, cy);
+                        g.DrawLine(p, cx - 5, cy + 4.5f, cx + 5, cy + 4.5f);
                         break;
                     case "copy":
                         g.DrawRectangle(p, cx - 5.5f, cy - 5.5f, 7, 7);
