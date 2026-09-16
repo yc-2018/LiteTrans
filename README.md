@@ -107,6 +107,19 @@ Windows 11 上的轻量翻译小工具。单个 exe 约 110 KB，常驻托盘，
 源码在 `src\`，双击 `build.cmd` 即可重新编译，只依赖 Windows 自带的 .NET Framework
 编译器（`csc.exe`），**不需要装 Visual Studio 或任何 SDK**。
 
+## GitHub 自动发布
+
+仓库中的 `.github/workflows/release.yml` 会在推送 `v主版本.次版本.修订版本` 标签时运行 Windows 构建，
+生成包含 `LiteTrans.exe`、`README.md` 和 `LICENSE` 的压缩包，并自动上传到 GitHub Release，同时附带 SHA-256 校验文件。
+例如：
+
+```text
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+也可以在 GitHub Actions 页面手动运行工作流，并填写要创建或更新的版本标签。
+
 ## 托盘图标看不到？
 
 Win11 默认把新程序的托盘图标收进溢出区。点任务栏的 `^` 展开即可看到，

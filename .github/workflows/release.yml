@@ -1,0 +1,145 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要创建或更新的发行版标签，例如 v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build LiteTrans
+        shell: cmd
+        run: call build.cmd
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'LiteTrans.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw 'build.cmd 没有生成 LiteTrans.exe'
+          }
+
+          $file = Get-Item -LiteralPath $exe
+          if ($file.Length -lt 10KB) {
+            throw "LiteTrans.exe 文件异常（$($file.Length) bytes）"
+          }
+
+      - name: Resolve release metadata
+        id: metadata
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          if ($env:EVENT_NAME -eq 'workflow_dispatch') {
+            $tag = $env:INPUT_TAG.Trim()
+          } else {
+            $tag = $env:REF_NAME.Trim()
+          }
+
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "发行版标签必须使用 v主版本.次版本.修订版本 格式，例如 v1.0.0；当前值：$tag"
+          }
+
+          if ($env:EVENT_NAME -eq 'workflow_dispatch') {
+            $existing = git rev-parse -q --verify "refs/tags/$tag^{commit}" 2>$null
+            if ($existing) {
+              $existing = ($existing | Select-Object -First 1).Trim()
+            }
+            if ($existing -and $existing -ne $env:CURRENT_SHA) {
+              throw "标签 $tag 已经指向另一个提交；请从该标签触发工作流，或换一个新标签。"
+            }
+          }
+
+          $version = $tag.Substring(1)
+          $packageName = "LiteTrans-$tag-windows-anycpu.zip"
+          $checksumName = "LiteTrans-$tag-SHA256SUMS.txt"
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "package_name=$packageName" >> $env:GITHUB_OUTPUT
+          "checksum_name=$checksumName" >> $env:GITHUB_OUTPUT
+
+      - name: Package release files
+        id: package
+        shell: pwsh
+        env:
+          TAG: ${{ steps.metadata.outputs.tag }}
+          PACKAGE_NAME: ${{ steps.metadata.outputs.package_name }}
+          CHECKSUM_NAME: ${{ steps.metadata.outputs.checksum_name }}
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP "LiteTrans-$env:TAG"
+          $package = Join-Path $env:GITHUB_WORKSPACE $env:PACKAGE_NAME
+          $checksum = Join-Path $env:GITHUB_WORKSPACE $env:CHECKSUM_NAME
+
+          if (Test-Path -LiteralPath $stage) {
+            Remove-Item -LiteralPath $stage -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $stage | Out-Null
+
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'LiteTrans.exe') -Destination $stage
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'README.md') -Destination $stage
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'LICENSE') -Destination $stage
+
+          if (Test-Path -LiteralPath $package) {
+            Remove-Item -LiteralPath $package -Force
+          }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $package -CompressionLevel Optimal
+
+          $hash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:PACKAGE_NAME" | Set-Content -LiteralPath $checksum -Encoding utf8NoBOM
+
+          "package=$package" >> $env:GITHUB_OUTPUT
+          "checksum=$checksum" >> $env:GITHUB_OUTPUT
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiteTrans-${{ steps.metadata.outputs.tag }}-windows-anycpu
+          path: |
+            ${{ steps.package.outputs.package }}
+            ${{ steps.package.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          PACKAGE: ${{ steps.package.outputs.package }}
+          CHECKSUM: ${{ steps.package.outputs.checksum }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          $null = gh release view $env:RELEASE_TAG 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:RELEASE_TAG $env:PACKAGE $env:CHECKSUM --clobber
+          } else {
+            gh release create $env:RELEASE_TAG $env:PACKAGE $env:CHECKSUM `
+              --target $env:COMMIT_SHA `
+              --title "LiteTrans $env:RELEASE_TAG" `
+              --generate-notes
+          }
