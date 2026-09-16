@@ -115,6 +115,7 @@ namespace LiteTrans
                 C.TranslateAllEngines = _allEngines;
                 C.Save();
                 _btnAllEngines.Active = _allEngines;
+                if (_allEngines) EnsureAllEnginesWindowHeight();
                 SetStatus(_allEngines ? "已开启全部引擎翻译" : "已切换为首选引擎翻译");
                 if (!string.IsNullOrWhiteSpace(_src.Text)) TranslateNow(_src.Text);
             };
@@ -168,9 +169,7 @@ namespace LiteTrans
             _engineLabel = new Label
             {
                 Text = "引擎",
-                AutoSize = false,
-                Size = new Size(38, 26),
-                TextAlign = ContentAlignment.MiddleLeft,
+                AutoSize = true,
                 BackColor = Color.Transparent,
                 Font = new Font("Microsoft YaHei UI", 8.5f),
             };

@@ -67,7 +67,7 @@ namespace LiteTrans
             {
                 var r = results[i];
                 if (r == null) continue;
-                if (allEngines && results.Count > 1)
+                if (allEngines)
                 {
                     if (i > 0) Append("\n\n", small, t.SubText);
                     Append("【" + EngineName(r.Engine) + "】", bold, t.Accent);
@@ -90,7 +90,7 @@ namespace LiteTrans
             _dst.SelectionStart = 0;
             _dst.ScrollToCaret();
 
-            if (allEngines && results.Count > 1)
+            if (allEngines)
             {
                 SetStatus("全部引擎 · 成功 " + success + "/" + results.Count
                         + (_fromSelection ? " · 划词" : ""));

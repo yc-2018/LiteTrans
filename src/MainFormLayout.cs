@@ -56,7 +56,7 @@ namespace LiteTrans
             _btnSpeak.Location = new Point(_btnCopy.Left - _btnSpeak.Width - 2, 8);
 
             // 左下角放置可直接切换的引擎选择器，状态信息占用剩余空间。
-            _engineLabel.Location = new Point(Pad, 9);
+            _engineLabel.Location = new Point(Pad, 13);
             _enginePicker.Location = new Point(_engineLabel.Right + 6, 8);
             int statusLeft = _enginePicker.Right + 10;
             int statusRight = _btnSpeak.Left - 10;
@@ -200,7 +200,8 @@ namespace LiteTrans
                 if ((int)m.Result == 1 /*HTCLIENT*/)
                 {
                     var p = PointToClient(new Point(m.LParam.ToInt32()));
-                    const int grip = 6;
+                    // 无边框窗口需要自己提供缩放命中区。适当加宽后，上下边缘更容易拖动。
+                    const int grip = 9;
                     bool l = p.X <= grip, r = p.X >= ClientSize.Width - grip;
                     bool t = p.Y <= grip, b = p.Y >= ClientSize.Height - grip;
 

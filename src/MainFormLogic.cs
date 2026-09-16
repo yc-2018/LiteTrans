@@ -136,6 +136,8 @@ namespace LiteTrans
         {
             if (string.IsNullOrWhiteSpace(text)) { SetStatus("没有可翻译的内容"); return; }
 
+            if (_allEngines) EnsureAllEnginesWindowHeight();
+
             int seq = ++_reqSeq;
             _btnTrans.Enabled = false;
             _btnTrans.Text = "翻译中";
@@ -147,32 +149,32 @@ namespace LiteTrans
             if (allEngines)
             {
                 var engines = OrderedEngineKeys(cfgSnapshot);
-                var batch = new TransResult[engines.Count];
                 if (engines.Count == 0)
                 {
                     CompleteTranslation(seq, new List<TransResult>(), true);
                     return;
                 }
 
+                var completed = new List<TransResult>();
+                var completedLock = new object();
                 int pending = engines.Count;
                 for (int i = 0; i < engines.Count; i++)
                 {
-                    int index = i;
                     string engine = engines[i];
                     ThreadPool.QueueUserWorkItem(delegate
                     {
+                        TransResult item;
                         try
                         {
                             // Each request gets its own clone because normalization assigns
                             // provider IDs and must not mutate another request's snapshot.
                             var localCfg = cfgSnapshot.Clone();
-                            var item = Translator.TranslateWithEngine(text, localCfg, engine);
+                            item = Translator.TranslateWithEngine(text, localCfg, engine);
                             if (string.IsNullOrWhiteSpace(item.Engine)) item.Engine = engine;
-                            batch[index] = item;
                         }
                         catch (Exception ex)
                         {
-                            batch[index] = new TransResult
+                            item = new TransResult
                             {
                                 Source = text,
                                 TgtLang = Translator.DecideTarget(text, cfgSnapshot),
@@ -180,13 +182,17 @@ namespace LiteTrans
                                 Error = Http.DescribeError(ex)
                             };
                         }
-                        finally
+
+                        List<TransResult> snapshot;
+                        bool done;
+                        lock (completedLock)
                         {
-                            if (Interlocked.Decrement(ref pending) == 0)
-                            {
-                                var results = new List<TransResult>(batch);
-                                CompleteTranslation(seq, results, true);
-                            }
+                            // 按完成先后加入快照，先返回的引擎先显示。
+                            completed.Add(item);
+                            done = Interlocked.Decrement(ref pending) == 0;
+                            snapshot = new List<TransResult>(completed);
+                            // 在同一把锁内提交 UI 更新，保证显示顺序与完成顺序一致。
+                            CompleteAllEnginesProgress(seq, snapshot, engines.Count, done);
                         }
                     });
                 }
@@ -201,6 +207,51 @@ namespace LiteTrans
                 var results = new List<TransResult> { item };
                 CompleteTranslation(seq, results, false);
             });
+        }
+
+        private void CompleteAllEnginesProgress(int seq, List<TransResult> results,
+            int total, bool done)
+        {
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (seq != _reqSeq) return;
+                    _lastResults = results;
+                    _last = FirstSuccessful(results);
+                    RenderResults(results, true);
+
+                    int success = 0;
+                    foreach (var r in results)
+                        if (r != null && r.Ok) success++;
+                    SetStatus("全部引擎 · 已完成 " + results.Count + "/" + total
+                        + " · 成功 " + success + (done ? "" : " · 翻译中…"));
+
+                    if (done)
+                    {
+                        _btnTrans.Enabled = true;
+                        _btnTrans.Text = "翻译";
+                        StopLoadingDisplay();
+                        AfterTranslate(_last);
+                    }
+                });
+            }
+            catch { }
+        }
+
+        /// <summary>全部引擎会纵向堆叠结果，自动给译文区留出更多空间。</summary>
+        private void EnsureAllEnginesWindowHeight()
+        {
+            var screen = Screen.FromControl(this).WorkingArea;
+            int engineCount = Translator.GetConfiguredEngineKeys(C).Count;
+            int desired = Math.Max(560, 360 + engineCount * 70);
+            desired = Math.Min(desired, screen.Height);
+            if (Height >= desired) return;
+
+            int newTop = Top;
+            if (newTop + desired > screen.Bottom) newTop = screen.Bottom - desired;
+            if (newTop < screen.Top) newTop = screen.Top;
+            SetBounds(Left, newTop, Width, desired);
         }
 
         private void CompleteTranslation(int seq, List<TransResult> results, bool allEngines)

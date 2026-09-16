@@ -38,10 +38,6 @@ namespace LiteTrans
 
         private void PageAdvanced(PageBuilder p)
         {
-            p.Section("AI 精翻（OpenAI 兼容接口）");
-            p.Note("可添加多个接口并自定义名称。地址填到 /v1 即可，程序自动补 /chat/completions；{target} 会替换为目标语言。启用的接口会出现在主窗口引擎列表中。");
-            BuildAiProviders(p);
-
             p.Section("百度翻译开放平台");
             p.TextField("APP ID", "BaiduAppId", 220);
             p.TextField("密钥", "BaiduKey", 220, true);
@@ -64,6 +60,11 @@ namespace LiteTrans
                     MessageBox.Show("打开失败：" + ex.Message, "轻译");
                 }
             }, 150);
+
+            // AI 配置通常较长，放在最后，避免把常用的连通性测试挤到窗口底部。
+            p.Section("AI 精翻（OpenAI 兼容接口）");
+            p.Note("可添加多个接口并自定义名称。地址填到 /v1 即可，程序自动补 /chat/completions；{target} 会替换为目标语言。启用的接口会出现在主窗口引擎列表中。");
+            BuildAiProviders(p);
         }
 
         private void BuildAiProviders(PageBuilder p)
