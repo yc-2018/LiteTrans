@@ -61,6 +61,9 @@ namespace LiteTrans
             {
                 var cp = base.CreateParams;
                 cp.ClassStyle |= 0x20000;        // CS_DROPSHADOW：给无边框窗口一点投影
+                // RichTextBox、ComboBox 都是独立的原生子窗口。整窗复合绘制可让主窗体和
+                // 子窗口在移动/缩放时一次性提交，避免滚动条残影和重复竖纹。
+                cp.ExStyle |= 0x02000000;        // WS_EX_COMPOSITED
                 return cp;
             }
         }
@@ -75,13 +78,14 @@ namespace LiteTrans
             Size = new Size(C.WinW, C.WinH);
             KeyPreview = true;
             DoubleBuffered = true;
+            SetStyle(ControlStyles.AllPaintingInWmPaint
+                   | ControlStyles.OptimizedDoubleBuffer
+                   | ControlStyles.ResizeRedraw, true);
             Text = "轻译 LiteTrans";
 
             // ——— 标题栏 ———
             _bar = new Panel { Dock = DockStyle.Top, Height = 40 };
             _bar.MouseDown += Drag_MouseDown;
-            _bar.MouseMove += EdgeResize_MouseMove;
-            _bar.MouseLeave += EdgeResize_MouseLeave;
 
             _title = new Label
             {

@@ -19,8 +19,6 @@ namespace LiteTrans
 
         private void RelayoutCore()
         {
-            UpdateRegion();
-
             int w = ClientSize.Width, h = ClientSize.Height;
             int right = w - Pad;
 
@@ -156,21 +154,9 @@ namespace LiteTrans
             Native.ApplyRoundCorners(Handle);
             Native.ApplyDarkTitleBar(Handle, Theme.Current.Dark);
             Native.ApplyBorderColor(Handle, Theme.Current.Border);
-            UpdateRegion();
         }
 
         private const float CornerRadius = 9f;
-
-        /// <summary>DWM 的圆角画在非客户区，而这里的非客户区已被裁掉，
-        /// 因此自行用 Region 裁出圆角，再补一圈抗锯齿描边遮住硬边。</summary>
-        private void UpdateRegion()
-        {
-            if (!IsHandleCreated || Width <= 0 || Height <= 0) return;
-            var old = Region;
-            using (var path = AppIcon.Rounded(new RectangleF(0, 0, Width, Height), CornerRadius))
-                Region = new Region(path);
-            if (old != null) old.Dispose();
-        }
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -186,12 +172,34 @@ namespace LiteTrans
         private void Drag_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
-            var control = sender as Control;
-            var screenPoint = control == null ? Cursor.Position : control.PointToScreen(e.Location);
-            var hit = ResizeHitTest(PointToClient(screenPoint));
-            Native.ReleaseCapture();
-            Native.SendMessage(Handle, 0xA1 /*WM_NCLBUTTONDOWN*/,
-                (IntPtr)(hit == 1 ? 2 /*HTCAPTION*/ : hit), IntPtr.Zero);
+            SetNativeChildRedraw(false);
+            try
+            {
+                Native.ReleaseCapture();
+                // 标题栏点击始终是移动窗口。边缘缩放由 WM_NCHITTEST/底栏边缘处理，
+                // 不要把标题栏顶部的普通拖动误判成 HTTOP，避免拖动时反复重绘闪烁。
+                Native.SendMessage(Handle, 0xA1 /*WM_NCLBUTTONDOWN*/, (IntPtr)2 /*HTCAPTION*/, IntPtr.Zero);
+            }
+            finally
+            {
+                // 系统移动循环结束后统一恢复，避免原生文本控件、光标和异步结果
+                // 在快速拖动期间各自重绘，造成零星文字闪烁。
+                SetNativeChildRedraw(true);
+                Invalidate(true);
+                Update();
+            }
+        }
+
+        private void SetNativeChildRedraw(bool enabled)
+        {
+            var controls = new Control[] { _src, _dst, _modePicker, _enginePicker };
+            foreach (var control in controls)
+            {
+                if (control == null || control.IsDisposed || !control.IsHandleCreated) continue;
+                Native.SendMessage(control.Handle, 0x000B /*WM_SETREDRAW*/,
+                    enabled ? (IntPtr)1 : IntPtr.Zero, IntPtr.Zero);
+                if (enabled) control.Invalidate();
+            }
         }
 
         private void EdgeResize_MouseDown(object sender, MouseEventArgs e)
@@ -225,6 +233,9 @@ namespace LiteTrans
         private int ResizeHitTest(Point p)
         {
             const int grip = 9;
+            const int topGrip = 3;
+            // 标题栏占据窗口顶部，只有最外侧 3px 保留顶部缩放；其余区域用于移动。
+            if (p.Y >= topGrip && p.Y < (_bar == null ? 40 : _bar.Height)) return 1;
             bool l = p.X <= grip, r = p.X >= ClientSize.Width - grip;
             bool t = p.Y <= grip, b = p.Y >= ClientSize.Height - grip;
 
