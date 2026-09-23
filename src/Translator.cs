@@ -36,9 +36,14 @@ namespace LiteTrans
             if (mode == "reverse") return c.PivotLang;
 
             bool srcIsCjk = TextPrep.CjkRatio(text) > 0.2;
-            bool targetIsCjk = c.TargetLang == "zh" || c.TargetLang == "zh-TW"
-                             || c.TargetLang == "ja" || c.TargetLang == "ko";
-            return (srcIsCjk && targetIsCjk) ? c.PivotLang : c.TargetLang;
+            bool targetIsCjk = IsCjkLang(c.TargetLang);
+            // 自动模式：译入与源语言书写系统相异的一方；若源语言已和主目标同系，改用备用语言。
+            return srcIsCjk == targetIsCjk ? c.PivotLang : c.TargetLang;
+        }
+
+        private static bool IsCjkLang(string lang)
+        {
+            return lang == "zh" || lang == "zh-TW" || lang == "ja" || lang == "ko";
         }
 
         public static TransResult Translate(string raw, Config c)
