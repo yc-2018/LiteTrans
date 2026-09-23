@@ -23,6 +23,12 @@ namespace LiteTrans
         private RichTextBox _src;
         private RichTextBox _dst;
 
+        // 开发者命名：短英文结果时提供多种标识符格式一键复制
+        private FlatBtn[] _caseBtns;
+        private ToolTip _caseTip;
+        private static readonly string[] CaseTips = { "小驼峰命名 · 点击复制", "大驼峰命名 · 点击复制",
+                                                      "下划线小写 · 点击复制", "下划线大写 · 点击复制" };
+
         // 底部
         private Panel _foot;
         private Label _engineLabel;
@@ -165,6 +171,20 @@ namespace LiteTrans
             };
             _dst.KeyDown += Global_KeyDown;
             _dstCard.Controls.Add(_dst);
+
+            // 短英文译文的标识符格式一键复制：小驼峰 / 大驼峰 / 下划线小写 / 下划线大写
+            _caseTip = new ToolTip();
+            _caseBtns = new FlatBtn[4];
+            for (int i = 0; i < _caseBtns.Length; i++)
+            {
+                var btn = new FlatBtn { Radius = 5, Visible = false, Font = new Font("Consolas", 8.5f) };
+                btn.Click += CaseChip_Click;
+                _caseTip.SetToolTip(btn, CaseTips[i]);
+                _caseBtns[i] = btn;
+                _dstCard.Controls.Add(btn);
+                btn.BringToFront();
+            }
+
             _loadingTimer = new System.Windows.Forms.Timer { Interval = 180 };
             _loadingTimer.Tick += delegate { UpdateLoadingDisplay(); };
 

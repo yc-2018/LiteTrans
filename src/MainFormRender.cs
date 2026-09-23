@@ -13,6 +13,7 @@ namespace LiteTrans
         {
             _loadingActive = true;
             _loadingFrame = 0;
+            if (_caseBtns != null) foreach (var b in _caseBtns) b.Visible = false;
             _dst.Clear();
             _dst.ReadOnly = true;
             _dst.SelectionColor = Theme.Current.SubText;
@@ -60,6 +61,7 @@ namespace LiteTrans
             {
                 Append("没有可用的翻译引擎", baseFont, Color.FromArgb(224, 82, 74));
                 _dst.ResumeLayout();
+                UpdateCaseChips();
                 SetStatus("没有可用的翻译引擎");
                 return;
             }
@@ -91,6 +93,8 @@ namespace LiteTrans
             _dst.ResumeLayout();
             _dst.SelectionStart = 0;
             _dst.ScrollToCaret();
+
+            UpdateCaseChips();
 
             if (allEngines)
             {
@@ -196,6 +200,58 @@ namespace LiteTrans
             {
                 Clipboard.SetText(_last.Text);
                 SetStatus("译文已复制");
+            }
+            catch { SetStatus("复制失败，剪贴板被占用"); }
+        }
+
+        // ================== 开发者命名：标识符格式一键复制 ==================
+        /// <summary>依据当前主结果刷新驼峰/下划线复制按钮的显示与内容。</summary>
+        private void UpdateCaseChips()
+        {
+            if (_caseBtns == null) return;
+
+            List<string> words = null;
+            if (_last != null && _last.Ok) words = TextPrep.IdentifierWords(_last.Text);
+
+            if (words == null)
+            {
+                if (CaseChipsVisible)
+                {
+                    foreach (var b in _caseBtns) b.Visible = false;
+                    Relayout();
+                }
+                return;
+            }
+
+            var values = new[]
+            {
+                TextPrep.ToCamel(words),
+                TextPrep.ToPascal(words),
+                TextPrep.ToSnake(words),
+                TextPrep.ToUpperSnake(words),
+            };
+            for (int i = 0; i < _caseBtns.Length; i++)
+            {
+                _caseBtns[i].Text = values[i];
+                _caseBtns[i].Tag = values[i];
+                _caseBtns[i].Visible = true;
+            }
+            Relayout();
+        }
+
+        private bool CaseChipsVisible
+        {
+            get { return _caseBtns != null && _caseBtns[0].Visible; }
+        }
+
+        private void CaseChip_Click(object sender, EventArgs e)
+        {
+            var value = (sender as Control) == null ? null : ((Control)sender).Tag as string;
+            if (string.IsNullOrEmpty(value)) return;
+            try
+            {
+                Clipboard.SetText(value);
+                SetStatus("已复制 " + value);
             }
             catch { SetStatus("复制失败，剪贴板被占用"); }
         }

@@ -46,7 +46,19 @@ namespace LiteTrans
 
             const int inner = 10;
             _src.SetBounds(inner, inner, _srcCard.Width - inner * 2, _srcCard.Height - inner * 2);
-            _dst.SetBounds(inner, inner, _dstCard.Width - inner * 2, _dstCard.Height - inner * 2);
+
+            int dstInnerW = _dstCard.Width - inner * 2;
+            int dstInnerH = _dstCard.Height - inner * 2;
+            if (CaseChipsVisible)
+            {
+                const int caseH = 26, gap = 6;
+                _dst.SetBounds(inner, inner, dstInnerW, Math.Max(24, dstInnerH - caseH - gap));
+                LayoutCaseChips(inner, _dst.Bottom + gap, dstInnerW, caseH);
+            }
+            else
+            {
+                _dst.SetBounds(inner, inner, dstInnerW, dstInnerH);
+            }
 
             // 底部：按钮右对齐
             _btnTrans.Location = new Point(right - _btnTrans.Width, 7);
@@ -59,6 +71,16 @@ namespace LiteTrans
             int statusLeft = _enginePicker.Right + 10;
             int statusRight = _btnSpeak.Left - 10;
             _status.SetBounds(statusLeft, 8, Math.Max(0, statusRight - statusLeft), 28);
+        }
+
+        /// <summary>把四个标识符格式按钮平分排在译文卡片底部一行。</summary>
+        private void LayoutCaseChips(int x, int y, int width, int height)
+        {
+            int n = _caseBtns.Length;
+            const int gap = 6;
+            int each = (width - gap * (n - 1)) / n;
+            for (int i = 0; i < n; i++)
+                _caseBtns[i].SetBounds(x + i * (each + gap), y, each, height);
         }
 
         /// <summary>原文只有一个单词时不该占掉四成高度，按真实内容高度收缩</summary>
@@ -114,6 +136,9 @@ namespace LiteTrans
             _dst.Font = font;
             _dst.BackColor = t.Panel;
             _dst.ForeColor = t.Text;
+
+            if (_caseBtns != null)
+                foreach (var b in _caseBtns) b.BackColor = t.Panel;
 
             _btnPin.Active = C.TopMost;
             TopMost = C.TopMost;

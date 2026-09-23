@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -99,6 +100,56 @@ namespace LiteTrans
         {
             return !string.IsNullOrEmpty(s) && s.Length <= 32
                 && Regex.IsMatch(s.Trim(), @"^[a-zA-Z][a-zA-Z'\-]*$");
+        }
+
+        /// <summary>把英文短语拆成用于生成标识符的单词；含中文/标点/过长/超过 4 词时返回 null。</summary>
+        public static List<string> IdentifierWords(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return null;
+            s = s.Trim();
+            if (s.Length > 48) return null;
+            // 仅接受纯英文短语，避免对整句或含中文的译文生效
+            if (!Regex.IsMatch(s, @"^[A-Za-z0-9][A-Za-z0-9 _\-]*$")) return null;
+
+            var words = new List<string>();
+            foreach (var w in Regex.Split(s, @"[^A-Za-z0-9]+"))
+                if (w.Length > 0) words.Add(w);
+            if (words.Count < 1 || words.Count > 4) return null;
+            return words;
+        }
+
+        private static string Cap(string w)
+        {
+            if (string.IsNullOrEmpty(w)) return w;
+            return char.ToUpperInvariant(w[0]) + w.Substring(1).ToLowerInvariant();
+        }
+
+        /// <summary>小驼峰：firstSecondThird</summary>
+        public static string ToCamel(List<string> words)
+        {
+            var sb = new StringBuilder(words[0].ToLowerInvariant());
+            for (int i = 1; i < words.Count; i++) sb.Append(Cap(words[i]));
+            return sb.ToString();
+        }
+
+        /// <summary>大驼峰：FirstSecondThird</summary>
+        public static string ToPascal(List<string> words)
+        {
+            var sb = new StringBuilder();
+            foreach (var w in words) sb.Append(Cap(w));
+            return sb.ToString();
+        }
+
+        /// <summary>下划线小写：first_second_third</summary>
+        public static string ToSnake(List<string> words)
+        {
+            return string.Join("_", words.ConvertAll(delegate(string w) { return w.ToLowerInvariant(); }).ToArray());
+        }
+
+        /// <summary>下划线大写：FIRST_SECOND_THIRD</summary>
+        public static string ToUpperSnake(List<string> words)
+        {
+            return string.Join("_", words.ConvertAll(delegate(string w) { return w.ToUpperInvariant(); }).ToArray());
         }
     }
 }
