@@ -102,19 +102,19 @@ namespace LiteTrans
                 && Regex.IsMatch(s.Trim(), @"^[a-zA-Z][a-zA-Z'\-]*$");
         }
 
-        /// <summary>把英文短语拆成用于生成标识符的单词；含中文/标点/过长/超过 4 词时返回 null。</summary>
+        /// <summary>把英文短语拆成用于生成标识符的单词；含中文/标点/过长/超过 5 词时返回 null。</summary>
         public static List<string> IdentifierWords(string s)
         {
             if (string.IsNullOrWhiteSpace(s)) return null;
             s = s.Trim();
-            if (s.Length > 48) return null;
+            if (s.Length > 56) return null;
             // 仅接受纯英文短语，避免对整句或含中文的译文生效
             if (!Regex.IsMatch(s, @"^[A-Za-z0-9][A-Za-z0-9 _\-]*$")) return null;
 
             var words = new List<string>();
             foreach (var w in Regex.Split(s, @"[^A-Za-z0-9]+"))
                 if (w.Length > 0) words.Add(w);
-            if (words.Count < 1 || words.Count > 4) return null;
+            if (words.Count < 1 || words.Count > 5) return null;
             return words;
         }
 
