@@ -33,6 +33,9 @@ namespace LiteTrans
         public static string Detected(string code)
         {
             if (string.IsNullOrEmpty(code) || code == "auto") return "自动";
+            // 微软返回 zh-Hans / zh-Hant，归一到内部代码再取显示名。
+            if (code == "zh-Hans" || code == "zh-CN") code = "zh";
+            else if (code == "zh-Hant" || code == "zh-TW" || code == "zh-HK") code = "zh-TW";
             return DisplayName(code);
         }
     }

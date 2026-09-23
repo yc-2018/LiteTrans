@@ -50,6 +50,21 @@ namespace LiteTrans
             return Read(req);
         }
 
+        /// <summary>GET 并带出最终重定向地址，便于按实际站点（如 www/cn 分流）续发同源请求。</summary>
+        public static string GetWithFinalUrl(string url, int timeoutMs, out string finalUrl,
+                                             WebHeaderCollection extra = null, bool useProxy = false,
+                                             string referer = null)
+        {
+            var req = Build(url, timeoutMs, extra, useProxy, referer);
+            req.Method = "GET";
+            using (var resp = (HttpWebResponse)req.GetResponse())
+            using (var sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+            {
+                finalUrl = resp.ResponseUri.ToString();
+                return sr.ReadToEnd();
+            }
+        }
+
         private static HttpWebRequest Build(string url, int timeoutMs, WebHeaderCollection extra,
                                             bool useProxy, string referer)
         {

@@ -110,6 +110,7 @@ namespace LiteTrans
             var options = new List<KeyValuePair<string, string>>
             {
                 new KeyValuePair<string, string>("transmart", "腾讯翻译（免密钥，推荐）"),
+                new KeyValuePair<string, string>("microsoft", "微软翻译（免密钥）"),
                 new KeyValuePair<string, string>("baidu", "百度翻译（需密钥）")
             };
             foreach (var provider in _c.AiProviders)

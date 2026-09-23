@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace LiteTrans
 {
@@ -90,6 +91,7 @@ namespace LiteTrans
                     {
                         case "ai": Ai(text, r, c, c.FindAiProvider(eng)); break;
                         case "baidu": Baidu(text, r, c); break;
+                        case "microsoft": Microsoft(text, r, c); break;
                         default:
                             if (eng.StartsWith("ai:", StringComparison.OrdinalIgnoreCase))
                                 Ai(text, r, c, c.FindAiProvider(eng));
@@ -141,6 +143,7 @@ namespace LiteTrans
         {
             if (engine == "baidu")
                 return !string.IsNullOrWhiteSpace(c.BaiduAppId) && !string.IsNullOrWhiteSpace(c.BaiduKey);
+            if (engine == "microsoft") return true;
             if (engine == "ai" || (engine ?? "").StartsWith("ai:", StringComparison.OrdinalIgnoreCase))
             {
                 var provider = c.FindAiProvider(engine);
@@ -175,6 +178,7 @@ namespace LiteTrans
         public static List<string> GetConfiguredEngineKeys(Config c)
         {
             var list = new List<string> { "transmart" };
+            list.Add("microsoft");
             if (IsEngineConfigured("baidu", c)) list.Add("baidu");
             c.NormalizeAiProviders();
             foreach (var provider in c.AiProviders)
@@ -194,6 +198,7 @@ namespace LiteTrans
         public static string EngineDisplay(string engine, Config c = null)
         {
             if (engine == "baidu") return "百度翻译";
+            if (engine == "microsoft") return "微软翻译";
             if (engine == "ai" || (engine ?? "").StartsWith("ai:", StringComparison.OrdinalIgnoreCase))
             {
                 var provider = c == null ? null : c.FindAiProvider(engine);
@@ -239,6 +244,85 @@ namespace LiteTrans
             foreach (var o in outs) sb.AppendLine(Convert.ToString(o));
             r.Text = sb.ToString().TrimEnd();
             r.SrcLang = Json.Str(node, "src_lang") ?? "auto";
+        }
+
+        // ================== 微软必应翻译（免密钥） ==================
+        // 复用必应网页翻译的免鉴权令牌：抓取翻译页里的 IG / token / key，令牌约 1 小时有效，本地缓存复用。
+        private static readonly object _msLock = new object();
+        private static string _msHost = "cn.bing.com", _msIg = "", _msIid = "translator.5023", _msKey, _msToken;
+        private static DateTime _msExpiry = DateTime.MinValue;
+
+        private static void EnsureBingToken(int timeoutMs, bool force)
+        {
+            lock (_msLock)
+            {
+                if (!force && !string.IsNullOrEmpty(_msToken) && DateTime.UtcNow < _msExpiry) return;
+
+                string finalUrl;
+                var page = Http.GetWithFinalUrl("https://cn.bing.com/translator", timeoutMs, out finalUrl);
+                try { _msHost = new Uri(finalUrl).Host; } catch { _msHost = "cn.bing.com"; }
+
+                var ah = Regex.Match(page, "params_AbusePreventionHelper\\s*=\\s*\\[(\\d+),\"([^\"]+)\",(\\d+)\\]");
+                if (!ah.Success) throw new Exception("必应令牌获取失败");
+
+                var ig = Regex.Match(page, "IG:\"([0-9A-Fa-f]+)\"");
+                var iid = Regex.Match(page, "data-iid=\"([^\"]+)\"");
+                _msIg = ig.Success ? ig.Groups[1].Value : "";
+                _msIid = iid.Success ? iid.Groups[1].Value : "translator.5023";
+                _msKey = ah.Groups[1].Value;
+                _msToken = ah.Groups[2].Value;
+
+                long interval;
+                if (!long.TryParse(ah.Groups[3].Value, out interval) || interval <= 0) interval = 3600000;
+                // 预留 5 分钟余量，避免临界过期。
+                _msExpiry = DateTime.UtcNow.AddMilliseconds(Math.Max(60000, interval - 300000));
+            }
+        }
+
+        /// <summary>把内部语言代码转换成必应/微软的写法。</summary>
+        private static string MicrosoftLang(string code)
+        {
+            if (code == "zh") return "zh-Hans";
+            if (code == "zh-TW") return "zh-Hant";
+            return code;
+        }
+
+        private static string BingTranslateOnce(string text, string to, int timeoutMs)
+        {
+            var body = "&fromLang=auto-detect&text=" + Http.UrlEncode(text)
+                     + "&to=" + Http.UrlEncode(to)
+                     + "&token=" + Http.UrlEncode(_msToken) + "&key=" + _msKey;
+            var url = "https://" + _msHost + "/ttranslatev3?isVertical=1&IG=" + _msIg + "&IID=" + _msIid;
+            return Http.Post(url, Encoding.UTF8.GetBytes(body), "application/x-www-form-urlencoded",
+                             timeoutMs, null, false, "https://" + _msHost + "/translator");
+        }
+
+        private static void Microsoft(string text, TransResult r, Config c)
+        {
+            int t = Math.Max(c.TimeoutMs, 8000);
+            var to = MicrosoftLang(r.TgtLang);
+
+            EnsureBingToken(t, false);
+            var resp = BingTranslateOnce(text, to, t);
+            var node = Json.Parse(resp);
+            // 令牌过期或校验失败时返回对象（含 statusCode），成功时是数组；此时强制刷新令牌重试一次。
+            if (!(node is IList))
+            {
+                EnsureBingToken(t, true);
+                resp = BingTranslateOnce(text, to, t);
+                node = Json.Parse(resp);
+            }
+
+            var list = node as IList;
+            if (list == null || list.Count == 0)
+            {
+                var code = Json.Str(node, "statusCode");
+                throw new Exception("必应翻译失败" + (string.IsNullOrEmpty(code) ? "" : " " + code));
+            }
+
+            r.Text = Convert.ToString(Json.Get(list[0], "translations.0.text"));
+            if (string.IsNullOrWhiteSpace(r.Text)) throw new Exception("必应未返回译文");
+            r.SrcLang = Json.Str(node, "0.detectedLanguage.language") ?? "auto";
         }
 
         // ================== 词典增强：音标 + 分词性释义 ==================
