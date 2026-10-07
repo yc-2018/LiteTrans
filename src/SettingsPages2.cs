@@ -287,7 +287,8 @@ namespace LiteTrans
 
             // 开关比输入框视觉更重，右端比输入框再内缩一点，不要贴着卡片边框
             _enabled.Left = Math.Max(left + 110, right - _enabled.Width - 6);
-            _enableLabel.Left = _enabled.Left - 36;
+            // 按标签实测宽度留位，写死偏移在不同字体/缩放下会压到开关上
+            _enableLabel.Left = _enabled.Left - _enableLabel.Width - 8;
             _name.Width = Math.Max(120, _enableLabel.Left - 12 - left);
         }
 
