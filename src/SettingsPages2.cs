@@ -70,18 +70,19 @@ namespace LiteTrans
         private void BuildAiProviders(PageBuilder p)
         {
             _c.NormalizeAiProviders();
+            // 这块区域刻意不自带滚动条：页面本身已可滚动，再套一层滚动区域后
+            // 两层各滚到各自尽头，最后一张卡片的“测试 / 删除”按钮就露不全。
+            // 改为高度随卡片数量增长，统一由页面的滚动条负责。
             var host = new Panel
             {
                 Width = 596,
-                Height = 590,
-                AutoScroll = true,
+                AutoScroll = false,
                 BackColor = Theme.Current.Bg,
             };
             var list = new FlowLayoutPanel
             {
                 Location = new Point(0, 38),
-                Width = 570,
-                Height = 530,
+                Width = 592,
                 AutoScroll = false,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
@@ -95,6 +96,7 @@ namespace LiteTrans
             Action rebuild = null;
             rebuild = delegate
             {
+                host.SuspendLayout();
                 while (list.Controls.Count > 0)
                 {
                     var child = list.Controls[list.Controls.Count - 1];
@@ -113,10 +115,21 @@ namespace LiteTrans
                         rebuild();
                     };
                     editors.Add(editor);
+                    editor.Width = Math.Max(300, list.Width - 6);
                     list.Controls.Add(editor);
                 }
-                list.Height = Math.Max(530, editors.Count * 245 + 8);
-                host.AutoScrollMinSize = new Size(0, list.Top + list.Height + 8);
+                list.Height = editors.Count * AiProviderEditor.Stride;
+                // 末尾多留一点空白，滚到底时最后一张卡片的按钮不会贴着窗口边缘
+                host.Height = list.Top + list.Height + 12;
+                host.ResumeLayout();
+                // 卡片数量变了，页面的滚动范围要跟着重算，否则最后一张卡片
+                // 的“测试 / 删除”按钮会卡在视口外滚不出来
+                var owner = host.Parent as ScrollableControl;
+                if (owner != null)
+                {
+                    var want = new Size(0, host.Bottom + 8);
+                    if (owner.AutoScrollMinSize != want) owner.AutoScrollMinSize = want;
+                }
             };
 
             add.Click += delegate
@@ -132,7 +145,15 @@ namespace LiteTrans
                 rebuild();
             };
             rebuild();
-            p.AddControl(host, 600, 8);
+            p.AddControl(host, host.Height, 8);
+            // 窗口宽度变化时，卡片跟着页面一起伸缩，避免右边框被裁掉
+            p.WidthChanged += delegate(int w)
+            {
+                list.Width = Math.Max(320, w - 4);
+                foreach (var editor in editors) editor.Width = list.Width - 6;
+            };
+            list.Width = Math.Max(320, p.ContentWidth - 4);
+            foreach (var e in editors) e.Width = list.Width - 6;
             p.AddCommit(delegate
             {
                 foreach (var editor in editors) editor.Commit();
@@ -209,30 +230,37 @@ namespace LiteTrans
     /// <summary>单个 AI 接口的可编辑卡片。</summary>
     internal sealed class AiProviderEditor : Panel
     {
+        private const int CardHeight = 236;
+        private const int GapBelow = 8;
+
+        /// <summary>一张卡片在列表里占用的垂直空间（含卡片之间的间距）。</summary>
+        public const int Stride = CardHeight + GapBelow;
+
         private readonly AiProviderConfig _provider;
         private readonly TextBox _name, _url, _key, _model, _prompt;
         private readonly Toggle _enabled;
+        private readonly Label _enableLabel;
         public event EventHandler TestRequested;
         public event EventHandler RemoveRequested;
 
         public AiProviderEditor(AiProviderConfig provider)
         {
             _provider = provider;
-            Width = 548;
-            Height = 236;
-            Margin = new Padding(0, 0, 0, 8);
+            Width = 584;
+            Height = CardHeight;
+            Margin = new Padding(0, 0, 0, GapBelow);
             BackColor = Theme.Current.Card;
             BorderStyle = BorderStyle.FixedSingle;
 
             _name = Field("名称", provider.Name, 8, 8, 310);
-            _url = Field("接口地址", provider.BaseUrl, 8, 42, 510);
-            _key = Field("API Key", provider.Key, 8, 76, 510, true);
-            _model = Field("模型", provider.Model, 8, 110, 510);
-            _prompt = Field("提示词", provider.Prompt, 8, 144, 510);
+            _url = Field("接口地址", provider.BaseUrl, 8, 42, 566);
+            _key = Field("API Key", provider.Key, 8, 76, 566, true);
+            _model = Field("模型", provider.Model, 8, 110, 566);
+            _prompt = Field("提示词", provider.Prompt, 8, 144, 566);
 
-            var enableLabel = new Label { Text = "启用", AutoSize = true, Location = new Point(342, 13), ForeColor = Theme.Current.Text, BackColor = Color.Transparent };
-            _enabled = new Toggle { Location = new Point(382, 10), Checked = provider.Enabled };
-            Controls.Add(enableLabel);
+            _enableLabel = new Label { Text = "启用", AutoSize = true, Location = new Point(410, 13), ForeColor = Theme.Current.Text, BackColor = Color.Transparent };
+            _enabled = new Toggle { Location = new Point(450, 10), Checked = provider.Enabled };
+            Controls.Add(_enableLabel);
             Controls.Add(_enabled);
 
             var test = new FlatBtn { Text = "测试", Size = new Size(70, 27), Location = new Point(8, 197) };
@@ -241,6 +269,26 @@ namespace LiteTrans
             remove.Click += delegate { if (RemoveRequested != null) RemoveRequested(this, EventArgs.Empty); };
             Controls.Add(test);
             Controls.Add(remove);
+            OnResize(EventArgs.Empty);
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (_url == null) return;   // 构造期间设置 Width 会先触发一次
+            // 卡片宽度跟随窗口，输入框右端始终贴着卡片内边距
+            int right = ClientSize.Width - 10;
+            int left = 8 + 80;
+            int full = Math.Max(140, right - left);
+            _url.Width = full;
+            _key.Width = full;
+            _model.Width = full;
+            _prompt.Width = full;
+
+            // 开关比输入框视觉更重，右端比输入框再内缩一点，不要贴着卡片边框
+            _enabled.Left = Math.Max(left + 110, right - _enabled.Width - 6);
+            _enableLabel.Left = _enabled.Left - 36;
+            _name.Width = Math.Max(120, _enableLabel.Left - 12 - left);
         }
 
         private TextBox Field(string label, string value, int x, int y, int width, bool password = false)

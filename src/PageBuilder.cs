@@ -15,14 +15,47 @@ namespace LiteTrans
         private readonly List<Action> _commits;
         private int _y = 4;
 
+        // 宽度跟随页面变化的控件（说明文字、AI 卡片区等），避免窗口变窄时右侧被裁
+        private readonly List<Control> _fluid = new List<Control>();
+        private int _contentW = 596;
+
         private const int LabelW = 178;
         private const int CtrlX = 190;
         private const int RowH = 34;
         private const int TextRowH = 40;
+        /// <summary>按最窄情形测量说明文字高度，窗口变宽后只会多出留白，不会截断尾部</summary>
+        private const int NarrowW = 460;
 
         public PageBuilder(Panel panel, Config cfg, List<Action> commits)
         {
             _p = panel; _c = cfg; _commits = commits;
+        }
+
+        public int ContentWidth { get { return _contentW; } }
+
+        /// <summary>页面宽度变化时调用，让可伸缩控件跟着改宽</summary>
+        public event Action<int> WidthChanged;
+
+        public bool SetContentWidth(int width)
+        {
+            if (width < 420) width = 420;
+            if (width == _contentW) return false;
+            _contentW = width;
+            foreach (var c in _fluid) c.Width = width;
+            if (WidthChanged != null) WidthChanged(width);
+            return true;
+        }
+
+        /// <summary>内容总高度，供页面设置滚动范围用</summary>
+        public int ContentBottom
+        {
+            get
+            {
+                int bottom = _y;
+                foreach (Control c in _p.Controls)
+                    if (c.Bottom + 8 > bottom) bottom = c.Bottom + 8;
+                return bottom;
+            }
         }
 
         /// <summary>给复杂设置控件预留一块可滚动区域。</summary>
@@ -30,9 +63,10 @@ namespace LiteTrans
         {
             if (control == null) return;
             control.Location = new Point(0, _y);
-            control.Width = Math.Max(control.Width, 596);
+            control.Width = _contentW;
             control.Height = height;
             _p.Controls.Add(control);
+            _fluid.Add(control);
             _y += height + margin;
         }
 
@@ -80,7 +114,6 @@ namespace LiteTrans
 
         public void Note(string text)
         {
-            const int w = 596;
             var font = new Font("Microsoft YaHei UI", 8.5f);
 
             // 按文字实际需要的行数给高度，避免长说明被裁掉尾部
@@ -88,7 +121,7 @@ namespace LiteTrans
             try
             {
                 h = TextRenderer.MeasureText(text, font,
-                        new Size(w, int.MaxValue), TextFormatFlags.WordBreak).Height + 4;
+                        new Size(NarrowW, int.MaxValue), TextFormatFlags.WordBreak).Height + 4;
             }
             catch { h = 34; }
             if (h < 20) h = 20;
@@ -97,20 +130,20 @@ namespace LiteTrans
             {
                 Text = text,
                 AutoSize = false,
-                Size = new Size(w, h),
+                Size = new Size(_contentW, h),
                 Location = new Point(0, _y),
                 ForeColor = Theme.Current.SubText,
                 BackColor = Color.Transparent,
                 Font = font,
             };
             _p.Controls.Add(l);
+            _fluid.Add(l);
             _y += h + 10;
         }
 
         /// <summary>带一个可点击链接的说明行</summary>
         public void LinkNote(string before, string linkText, string after, string url)
         {
-            const int w = 596;
             var text = (before ?? "") + (linkText ?? "") + (after ?? "");
             var font = new Font("Microsoft YaHei UI", 8.5f);
 
@@ -118,7 +151,7 @@ namespace LiteTrans
             try
             {
                 h = TextRenderer.MeasureText(text, font,
-                        new Size(w, int.MaxValue), TextFormatFlags.WordBreak).Height + 4;
+                        new Size(NarrowW, int.MaxValue), TextFormatFlags.WordBreak).Height + 4;
             }
             catch { h = 34; }
             if (h < 20) h = 20;
@@ -127,7 +160,7 @@ namespace LiteTrans
             {
                 Text = text,
                 AutoSize = false,
-                Size = new Size(w, h),
+                Size = new Size(_contentW, h),
                 Location = new Point(0, _y),
                 ForeColor = Theme.Current.SubText,
                 LinkColor = Theme.Current.Accent,
@@ -152,6 +185,7 @@ namespace LiteTrans
                 }
             };
             _p.Controls.Add(l);
+            _fluid.Add(l);
             _y += h + 10;
         }
 

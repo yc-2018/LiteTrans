@@ -41,11 +41,25 @@ namespace LiteTrans
             SuspendLayout();
 
             Text = "轻译 · 设置";
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
+            FormBorderStyle = FormBorderStyle.Sizable;
+            MaximizeBox = true;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(820, 680);   // 容得下内容最长的页面，避免出现滚动条
+            // 窗口不能超出屏幕工作区，否则小分辨率下底部按钮会被任务栏或屏幕边缘吃掉
+            var work = Screen.FromPoint(Cursor.Position).WorkingArea;
+            ClientSize = new Size(Math.Min(860, work.Width - 40), Math.Min(700, work.Height - 60));
+            MinimumSize = new Size(720, 420);
+            // WinForms 会按字体缩放整窗尺寸，高 DPI 下可能顶出屏幕，加载时再收一次
+            Load += delegate
+            {
+                var wa = Screen.FromControl(this).WorkingArea;
+                int w = Math.Min(Width, wa.Width - 20), h = Math.Min(Height, wa.Height - 20);
+                if (w != Width || h != Height)
+                {
+                    Size = new Size(w, h);
+                    Location = new Point(wa.Left + (wa.Width - w) / 2, wa.Top + (wa.Height - h) / 2);
+                }
+            };
             ShowInTaskbar = true;
             BackColor = t.Bg;
             ForeColor = t.Text;
@@ -89,7 +103,9 @@ namespace LiteTrans
                 _btnCancel.Location = new Point(_btnSave.Left - _btnCancel.Width - 8, 10);
             };
             Controls.Add(foot);
-            foot.BringToFront();
+            // 注意顺序：Dock 布局按 z-order 倒序分配空间，Fill 的内容区必须排在最前，
+            // 否则它会先占满整个高度、底部按钮条再盖上去，把最后一行内容永久遮住。
+            _body.BringToFront();
 
             BuildPages();
 
@@ -117,6 +133,13 @@ namespace LiteTrans
                 _body.Controls.Add(page);
                 _pages.Add(page);
 
+                // 窗口可缩放：页面宽度一变，说明文字和 AI 卡片区跟着改宽，
+                // 同时按实际内容重算滚动范围，保证最后一行按钮能滚出来。
+                var pageRef = page;
+                var pbRef = pb;
+                page.Resize += delegate { SyncPage(pageRef, pbRef); };
+                SyncPage(page, pb);
+
                 var btn = new FlatBtn
                 {
                     Text = names[i],
@@ -129,6 +152,28 @@ namespace LiteTrans
                 _nav.Controls.Add(btn);
                 _tabs.Add(btn);
             }
+        }
+
+        /// <summary>让页面内容跟随窗口宽度，并按实际内容高度给出滚动范围</summary>
+        private static void SyncPage(Panel page, PageBuilder pb)
+        {
+            bool widthChanged = false;
+            if (page.ClientSize.Width > 0)
+            {
+                // 始终按“垂直滚动条已占位”算宽度：这样滚动条出现与否都得到同一个值，
+                // 不会因为先设宽、滚动条再冒出来而挤出一条多余的水平滚动条。
+                int w = page.ClientSize.Width - 4;
+                if (!page.VerticalScroll.Visible) w -= SystemInformation.VerticalScrollBarWidth;
+                widthChanged = pb.SetContentWidth(w);
+            }
+            var want = new Size(0, pb.ContentBottom);
+            if (page.AutoScrollMinSize != want) page.AutoScrollMinSize = want;
+            // 设置页只需要上下滚动。缩放窗口时 WinForms 会残留一条横向滚动条，
+            // 这里把横向范围清零再重新启用 AutoScroll 把它收回去。
+            page.HorizontalScroll.Maximum = 0;
+            page.HorizontalScroll.Visible = false;
+            page.AutoScroll = true;
+            if (widthChanged) page.PerformLayout();
         }
 
         /// <summary>供外部指定初始页（命令行 --page=N）</summary>
