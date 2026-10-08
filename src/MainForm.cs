@@ -16,7 +16,7 @@ namespace LiteTrans
         private Panel _bar;
         private Label _title;
         private ComboBox _modePicker;
-        private IconBtn _btnAllEngines, _btnPin, _btnGear, _btnClose;
+        private IconBtn _btnPin, _btnGear, _btnClose;
 
         // 内容
         private Card _srcCard, _dstCard;
@@ -50,6 +50,7 @@ namespace LiteTrans
         private int _loadingFrame;
         private bool _loadingActive;
 
+        private const string AllEnginesKey = "all";
         private readonly List<string> _engineKeys = new List<string>();
         private static readonly string[] ModeKeys = { "auto", "forward", "reverse" };
 
@@ -117,19 +118,6 @@ namespace LiteTrans
             _btnPin = new IconBtn { Kind = "pin", Tip = "窗口置顶" };
             _btnGear = new IconBtn { Kind = "gear", Tip = "设置" };
             _btnClose = new IconBtn { Kind = "close", Tip = "收回托盘 (Esc)" };
-            _btnAllEngines = new IconBtn { Kind = "all", Tip = "全部已配置引擎翻译" };
-
-            _btnAllEngines.Click += (s, e) =>
-            {
-                _allEngines = !_allEngines;
-                C.TranslateAllEngines = _allEngines;
-                C.Save();
-                _btnAllEngines.Active = _allEngines;
-                if (_allEngines) EnsureAllEnginesWindowHeight();
-                SetStatus(_allEngines ? "已开启全部引擎翻译" : "已切换为首选引擎翻译");
-                if (!string.IsNullOrWhiteSpace(_src.Text)) TranslateNow(_src.Text);
-            };
-
             _btnPin.Click += (s, e) =>
             {
                 C.TopMost = !C.TopMost;
@@ -140,7 +128,7 @@ namespace LiteTrans
             _btnGear.Click += (s, e) => _app.ShowSettings();
             _btnClose.Click += (s, e) => HideToTray();
 
-            _bar.Controls.AddRange(new Control[] { _title, _modePicker, _btnAllEngines, _btnPin, _btnGear, _btnClose });
+            _bar.Controls.AddRange(new Control[] { _title, _modePicker, _btnPin, _btnGear, _btnClose });
 
             // ——— 原文 ———
             _srcCard = new Card();
@@ -284,11 +272,15 @@ namespace LiteTrans
                 _enginePicker.SelectedIndex >= _engineKeys.Count) return;
 
             var engine = _engineKeys[_enginePicker.SelectedIndex];
-            if (C.Engine == engine) return;
+            bool allEngines = engine == AllEnginesKey;
+            if (_allEngines == allEngines && (allEngines || C.Engine == engine)) return;
 
-            C.Engine = engine;
+            _allEngines = allEngines;
+            C.TranslateAllEngines = allEngines;
+            if (!allEngines) C.Engine = engine;
             C.Save();
-            SetStatus("已切换到 " + EngineName(engine));
+            if (allEngines) EnsureAllEnginesWindowHeight();
+            SetStatus(allEngines ? "已开启全部引擎翻译" : "已切换到 " + EngineName(engine));
 
             // 已有原文时立即重译，让下拉框的切换结果可见。
             if (!string.IsNullOrWhiteSpace(_src.Text)) TranslateNow(_src.Text);
@@ -312,15 +304,17 @@ namespace LiteTrans
                     if (string.Equals(key, preferred, StringComparison.OrdinalIgnoreCase)) { hasPreferred = true; break; }
                 if (!hasPreferred) keys.Add(preferred);
                 _engineKeys.Clear();
+                _engineKeys.Add(AllEnginesKey);
                 _engineKeys.AddRange(keys);
 
                 _enginePicker.BeginUpdate();
                 _enginePicker.Items.Clear();
                 foreach (var key in _engineKeys)
-                    _enginePicker.Items.Add(Translator.EngineDisplay(key, C));
+                    _enginePicker.Items.Add(key == AllEnginesKey ? "⭐全部翻译⭐" : Translator.EngineDisplay(key, C));
+                var selected = _allEngines ? AllEnginesKey : preferred;
                 int index = 0;
                 for (int i = 0; i < _engineKeys.Count; i++)
-                    if (string.Equals(_engineKeys[i], preferred, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
+                    if (string.Equals(_engineKeys[i], selected, StringComparison.OrdinalIgnoreCase)) { index = i; break; }
                 if (_enginePicker.SelectedIndex != index) _enginePicker.SelectedIndex = index;
                 _enginePicker.EndUpdate();
             }
