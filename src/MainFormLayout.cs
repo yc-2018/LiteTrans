@@ -17,6 +17,71 @@ namespace LiteTrans
             finally { _relayouting = false; }
         }
 
+        /// <summary>
+        /// 把重排推迟到当前这条消息处理完之后，并合并同一轮里的多次请求。
+        /// 直接在 RichEdit 的 ContentsResized 通知里改布局会重入原生控件，
+        /// 组字时这样做会让输入法直接结束组字。
+        /// </summary>
+        private void QueueRelayout()
+        {
+            _relayoutPending = true;
+            if (_relayoutQueued || IsDisposed || Disposing) return;
+            _relayoutQueued = true;
+            try
+            {
+                BeginInvoke((MethodInvoker)RunQueuedRelayout);
+            }
+            catch
+            {
+                // 句柄还没建好或窗口已销毁：交给下一次 Relayout/Resize 兜底
+                _relayoutQueued = false;
+            }
+        }
+
+        private void RunQueuedRelayout()
+        {
+            _relayoutQueued = false;
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            // 组字期间绝不重排，否则候选框会被打断；
+            // 组字结束时 ImeWatch 会再投递一次。
+            if (_imeComposing) return;
+            _relayoutPending = false;
+            Relayout();
+        }
+
+        /// <summary>输入法组字期间不做任何布局，避免把组字状态打断。</summary>
+        private sealed class ImeWatch : NativeWindow
+        {
+            private const int WM_KILLFOCUS = 0x0008;
+            private const int WM_IME_STARTCOMPOSITION = 0x010D;
+            private const int WM_IME_ENDCOMPOSITION = 0x010E;
+            private readonly MainForm _owner;
+
+            public ImeWatch(MainForm owner) { _owner = owner; }
+
+            protected override void WndProc(ref Message m)
+            {
+                if (m.Msg == WM_IME_STARTCOMPOSITION)
+                {
+                    _owner._imeComposing = true;
+                }
+                else if (m.Msg == WM_IME_ENDCOMPOSITION || m.Msg == WM_KILLFOCUS)
+                {
+                    // 失焦时输入法也会结束组字，这里一并复位，避免状态卡在“组字中”
+                    _owner._imeComposing = false;
+                    if (_owner._relayoutPending) _owner.QueueRelayout();
+                }
+                base.WndProc(ref m);
+            }
+        }
+
+        private void AttachImeWatch()
+        {
+            if (_imeWatch != null || _src == null || !_src.IsHandleCreated) return;
+            _imeWatch = new ImeWatch(this);
+            _imeWatch.AssignHandle(_src.Handle);
+        }
+
         private void RelayoutCore()
         {
             int w = ClientSize.Width, h = ClientSize.Height;
@@ -82,20 +147,32 @@ namespace LiteTrans
                 _caseBtns[i].SetBounds(x + i * (each + gap), y, each, height);
         }
 
-        /// <summary>原文只有一个单词时不该占掉四成高度，按真实内容高度收缩</summary>
+        /// <summary>
+        /// 原文只有一个单词时不该占掉四成高度，按真实内容高度收缩。
+        /// 高度按“行数 × 行高”算，不用 RichEdit 报告的像素高度：后者会随
+        /// 滚动条出现/消失来回变化，导致每敲一个字窗口就抖一下、反复重排。
+        /// 注意 RichEdit 自己的行距比 Font.Height 大（约 1.3~1.4 倍）：按字体高度
+        /// 算出来的框会一直比内容矮一点，右边常年挂着滚动条，空框时连光标都看不见。
+        /// </summary>
         private int MeasureSrcHeight(int cardWidth, int avail)
         {
-            int min = 46;
+            int fontHeight = _src.Font.Height > 0 ? _src.Font.Height : 23;
+            int lineHeight = (int)Math.Ceiling(fontHeight * 1.4);   // RichEdit 实际行距
+            const int padding = 20;                                 // 卡片上下内边距
+
+            int min = lineHeight + padding;         // 空框也要放得下一整行
+            if (min < 46) min = 46;
             int max = (int)(avail * (C.CompactMode ? 0.34 : 0.46));
             if (max < min) return min;
 
-            var text = _src.Text;
-            if (string.IsNullOrEmpty(text)) return min;
+            if (string.IsNullOrEmpty(_src.Text)) return min;
 
-            // _srcContentH 来自 RichEdit 自己的排版结果，是唯一可靠的内容高度
-            int h = _srcContentH > 0 ? _srcContentH + 22 : min;
+            int lines;
+            try { lines = _src.GetLineFromCharIndex(_src.TextLength) + 1; }
+            catch { lines = 1; }
+            if (lines < 1) lines = 1;
 
-            return Math.Max(min, Math.Min(h, max));
+            return Math.Max(min, Math.Min(lines * lineHeight + padding, max));
         }
 
         public void ApplyTheme()

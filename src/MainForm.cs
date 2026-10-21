@@ -37,8 +37,11 @@ namespace LiteTrans
         private FlatBtn _btnTrans;
         private IconBtn _btnSpeak, _btnCopy;
 
-        private int _srcContentH;            // 原文实际排版高度，由 ContentsResized 报告
         private bool _relayouting;           // 防止布局与内容重排互相触发
+        private bool _relayoutQueued;        // 已经投递过一次延迟布局
+        private bool _relayoutPending;       // 有布局请求在等组字结束
+        private bool _imeComposing;          // 原文框正在输入法组字
+        private ImeWatch _imeWatch;
         private int _reqSeq;                 // 请求序号，丢弃过期响应
         private TransResult _last;
         private List<TransResult> _lastResults;
@@ -141,10 +144,24 @@ namespace LiteTrans
                 ShortcutsEnabled = true,
             };
             _src.KeyDown += Src_KeyDown;
+            _src.HandleCreated += delegate { AttachImeWatch(); };
+            _src.HandleDestroyed += delegate
+            {
+                if (_imeWatch != null)
+                {
+                    try { _imeWatch.ReleaseHandle(); } catch { }
+                    _imeWatch = null;
+                }
+                _imeComposing = false;
+                _relayoutQueued = false;
+            };
             _src.ContentsResized += delegate(object s, ContentsResizedEventArgs e)
             {
-                _srcContentH = e.NewRectangle.Height;
-                Relayout();
+                // 不要在这条 RichEdit 通知里同步改布局：输入法组字时，控件的
+                // ContentsResized 就发生在这轮组字消息内部，同步 Relayout 会
+                // 重新读文本、改尺寸，直接把组字打断（候选框一闪即消、中文打不进去）。
+                // 这里只登记，等消息处理完（且不在组字中）再统一重排。
+                QueueRelayout();
             };
             _srcCard.Controls.Add(_src);
 

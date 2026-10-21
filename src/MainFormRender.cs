@@ -218,7 +218,7 @@ namespace LiteTrans
                 if (CaseChipsVisible)
                 {
                     foreach (var b in _caseBtns) b.Visible = false;
-                    Relayout();
+                    QueueRelayout();
                 }
                 return;
             }
@@ -236,7 +236,8 @@ namespace LiteTrans
                 _caseBtns[i].Tag = values[i];
                 _caseBtns[i].Visible = true;
             }
-            Relayout();
+            // 懒重排：翻译结果可能在用户组字时到达，不能当场改布局打断输入法
+            QueueRelayout();
         }
 
         private bool CaseChipsVisible
