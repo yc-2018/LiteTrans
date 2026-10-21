@@ -47,6 +47,8 @@ namespace LiteTrans
             SuspendLayout();
 
             Text = "轻译 · 设置";
+            // 尺寸由 D() 按 DPI 折算，关掉 WinForms 自动缩放避免二次缩放
+            AutoScaleMode = AutoScaleMode.None;
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = true;
             MinimizeBox = false;

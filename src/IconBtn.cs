@@ -62,72 +62,94 @@ namespace LiteTrans
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Parent != null ? Parent.BackColor : t.Bg);
 
+            // 图标几何按 32x28 的设计稿书写，绘制时按控件实际大小整体缩放。
+            // 否则高 DPI 下按钮放大了，图形还是那几个像素，看着只有按钮的一小块。
+            float k = Math.Min(Width / 32f, Height / 28f);
+            if (k <= 0f) k = 1f;
+
             if (_hover || _down || Active)
             {
                 var bg = Kind == "close" ? Color.FromArgb(232, 66, 58)
                        : Active ? t.Accent
                        : (_down ? t.Border : t.Hover);
-                using (var path = AppIcon.Rounded(new RectangleF(1, 1, Width - 3, Height - 3), 5))
+                float inset = 1f * k;
+                using (var path = AppIcon.Rounded(
+                    new RectangleF(inset, inset, Width - inset * 3, Height - inset * 3), 5f * k))
                 using (var b = new SolidBrush(bg)) g.FillPath(b, path);
             }
 
             var fg = (Kind == "close" && (_hover || _down)) ? Color.White
                    : Active ? t.AccentText : t.Text;
-            float cx = Width / 2f, cy = Height / 2f;
 
-            using (var p = new Pen(fg, 1.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+            var state = g.Save();
+            g.TranslateTransform(Width / 2f, Height / 2f);
+            // 图形按 32x28 画稿书写，这里整体缩放。1.25 让图标约占按钮高度
+            // 的六成，既不再发空，也不会顶到按钮边框。
+            g.ScaleTransform(k * 1.25f, k * 1.25f);
+
+            using (var p = new Pen(fg, 1.1f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
             {
                 switch (Kind)
                 {
                     case "close":
-                        g.DrawLine(p, cx - 4, cy - 4, cx + 4, cy + 4);
-                        g.DrawLine(p, cx + 4, cy - 4, cx - 4, cy + 4);
+                        g.DrawLine(p, -4, -4, 4, 4);
+                        g.DrawLine(p, 4, -4, -4, 4);
                         break;
                     case "min":
-                        g.DrawLine(p, cx - 5, cy, cx + 5, cy);
+                        g.DrawLine(p, -5, 0, 5, 0);
                         break;
                     case "gear":
                         // 齿轮在 12px 内会糊成一团，改用辨识度更高的滑块图形
-                        g.DrawLine(p, cx - 5.5f, cy - 3f, cx + 5.5f, cy - 3f);
-                        g.DrawLine(p, cx - 5.5f, cy + 3f, cx + 5.5f, cy + 3f);
+                        g.DrawLine(p, -5.5f, -3f, 5.5f, -3f);
+                        g.DrawLine(p, -5.5f, 3f, 5.5f, 3f);
                         using (var dot = new SolidBrush(fg))
                         {
-                            g.FillEllipse(dot, cx - 2.6f, cy - 5.6f, 5.2f, 5.2f);
-                            g.FillEllipse(dot, cx + 0.4f, cy + 0.4f, 5.2f, 5.2f);
+                            g.FillEllipse(dot, -2.6f, -5.6f, 5.2f, 5.2f);
+                            g.FillEllipse(dot, 0.4f, 0.4f, 5.2f, 5.2f);
                         }
                         break;
                     case "pin":
-                        // “置顶”语义：一条顶线加一个向上箭头
-                        g.DrawLine(p, cx - 5f, cy - 5f, cx + 5f, cy - 5f);
-                        g.DrawLine(p, cx, cy + 5.5f, cx, cy - 1.5f);
-                        g.DrawLine(p, cx - 3.4f, cy + 1.6f, cx, cy - 1.8f);
-                        g.DrawLine(p, cx + 3.4f, cy + 1.6f, cx, cy - 1.8f);
+                        // 图钉轮廓：上方圆头 + 下方针尖，比线条组合更易辨认
+                        using (var pin = new GraphicsPath())
+                        {
+                            pin.AddLine(-4.6f, -4.8f, 4.6f, -4.8f);
+                            pin.AddLine(4.6f, -4.8f, 2.4f, -0.8f);
+                            pin.AddLine(2.4f, -0.8f, 2.4f, 1.6f);
+                            pin.AddLine(2.4f, 1.6f, -2.4f, 1.6f);
+                            pin.AddLine(-2.4f, 1.6f, -2.4f, -0.8f);
+                            pin.AddLine(-2.4f, -0.8f, -4.6f, -4.8f);
+                            pin.CloseFigure();
+                            g.FillPath(new SolidBrush(fg), pin);
+                        }
+                        g.DrawLine(p, 0, 1.6f, 0, 5.0f);
                         break;
                     case "swap":
-                        g.DrawLine(p, cx - 5, cy - 2.5f, cx + 5, cy - 2.5f);
-                        g.DrawLine(p, cx + 2.2f, cy - 5.5f, cx + 5, cy - 2.5f);
-                        g.DrawLine(p, cx + 5, cy + 2.5f, cx - 5, cy + 2.5f);
-                        g.DrawLine(p, cx - 2.2f, cy + 5.5f, cx - 5, cy + 2.5f);
+                        g.DrawLine(p, -5, -2.5f, 5, -2.5f);
+                        g.DrawLine(p, 2.2f, -5.5f, 5, -2.5f);
+                        g.DrawLine(p, 5, 2.5f, -5, 2.5f);
+                        g.DrawLine(p, -2.2f, 5.5f, -5, 2.5f);
                         break;
                     case "all":
                         // 多引擎：三条等长结果线，保持标题栏图标清晰。
-                        g.DrawLine(p, cx - 5, cy - 4.5f, cx + 5, cy - 4.5f);
-                        g.DrawLine(p, cx - 5, cy, cx + 5, cy);
-                        g.DrawLine(p, cx - 5, cy + 4.5f, cx + 5, cy + 4.5f);
+                        g.DrawLine(p, -5, -4.5f, 5, -4.5f);
+                        g.DrawLine(p, -5, 0, 5, 0);
+                        g.DrawLine(p, -5, 4.5f, 5, 4.5f);
                         break;
                     case "copy":
-                        g.DrawRectangle(p, cx - 5.5f, cy - 5.5f, 7, 7);
-                        g.DrawRectangle(p, cx - 1.5f, cy - 1.5f, 7, 7);
+                        g.DrawRectangle(p, -5.5f, -5.5f, 7, 7);
+                        g.DrawRectangle(p, -1.5f, -1.5f, 7, 7);
                         break;
                     case "speak":
-                        g.DrawLine(p, cx - 4.5f, cy - 2.5f, cx - 4.5f, cy + 2.5f);
-                        g.DrawLine(p, cx - 4.5f, cy - 2.5f, cx - 1f, cy - 5.5f);
-                        g.DrawLine(p, cx - 4.5f, cy + 2.5f, cx - 1f, cy + 5.5f);
-                        g.DrawLine(p, cx - 1f, cy - 5.5f, cx - 1f, cy + 5.5f);
-                        g.DrawArc(p, cx + 0.5f, cy - 4f, 5f, 8f, -60, 120);
+                        g.DrawLine(p, -4.5f, -2.5f, -4.5f, 2.5f);
+                        g.DrawLine(p, -4.5f, -2.5f, -1f, -5.5f);
+                        g.DrawLine(p, -4.5f, 2.5f, -1f, 5.5f);
+                        g.DrawLine(p, -1f, -5.5f, -1f, 5.5f);
+                        g.DrawArc(p, 0.5f, -4f, 5f, 8f, -60, 120);
                         break;
                 }
             }
+
+            g.Restore(state);
         }
     }
 }

@@ -31,6 +31,8 @@ namespace LiteTrans
 
             Show();
             WindowState = FormWindowState.Normal;
+            // 窗口真正显示后 DPI 才稳定，再折算一次，兜住首次取值偏小的情况
+            SyncDpi();
             Native.ForceForeground(this);
 
             // 子控件句柄在窗口显示后才存在，此时才能改原生滚动条外观
@@ -129,9 +131,17 @@ namespace LiteTrans
             }
             if (WindowState == FormWindowState.Normal)
             {
-                // 配置里统一存 96 DPI 设计值，换缩放后不会被二次放大
-                C.WinW = Math.Max(420, (int)Math.Round(Width / Math.Max(0.01f, _dpi)));
-                C.WinH = Math.Max(300, (int)Math.Round(Height / Math.Max(0.01f, _dpi)));
+                // 配置里统一存 96 DPI 设计值，换缩放后不会被二次放大。
+                // 用实时 DPI 而不是字段值：收起窗口可能发生在首次折算之前。
+                float dpi = Math.Max(0.01f, UiScale.Factor(this));
+                int w = (int)Math.Round(Width / dpi);
+                int h = (int)Math.Round(Height / dpi);
+                // 窗口停在最小尺寸时多半是还没完成布局，别用它覆盖用户设置的尺寸
+                if (w > 420 || h > 300)
+                {
+                    C.WinW = Math.Max(420, w);
+                    C.WinH = Math.Max(300, h);
+                }
             }
             C.Save();
             Hide();

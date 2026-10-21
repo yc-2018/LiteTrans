@@ -136,6 +136,9 @@ namespace LiteTrans
         private void BuildUi()
         {
             SuspendLayout();
+            // 尺寸完全由 D() 按 DPI 折算，关掉 WinForms 的自动缩放，
+            // 否则会二次缩放：我们算出 1278x856，WinForms 再按字体 DPI 缩回 639x428。
+            AutoScaleMode = AutoScaleMode.None;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;

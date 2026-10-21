@@ -97,8 +97,8 @@ namespace LiteTrans
             int barCenterY = _bar.Height / 2;
             int btnY = barCenterY - _btnClose.Height / 2;
             _btnClose.Location = new Point(right - _btnClose.Width, btnY);
-            _btnGear.Location = new Point(_btnClose.Left - _btnGear.Width - D(2), btnY);
-            _btnPin.Location = new Point(_btnGear.Left - _btnPin.Width - D(2), btnY);
+            _btnGear.Location = new Point(_btnClose.Left - _btnGear.Width - D(4), btnY);
+            _btnPin.Location = new Point(_btnGear.Left - _btnPin.Width - D(4), btnY);
 
             // 标题垂直居中
             _title.Location = new Point(D(14), barCenterY - _title.Height / 2);
@@ -138,7 +138,7 @@ namespace LiteTrans
             int footCenterY = _foot.Height / 2;
             _btnTrans.Location = new Point(right - _btnTrans.Width, footCenterY - _btnTrans.Height / 2);
             _btnCopy.Location = new Point(_btnTrans.Left - _btnCopy.Width - D(6), footCenterY - _btnCopy.Height / 2);
-            _btnSpeak.Location = new Point(_btnCopy.Left - _btnSpeak.Width - D(2), footCenterY - _btnSpeak.Height / 2);
+            _btnSpeak.Location = new Point(_btnCopy.Left - _btnSpeak.Width - D(4), footCenterY - _btnSpeak.Height / 2);
 
             // 左下角放置可直接切换的引擎选择器，状态信息占用剩余空间。
             // AutoSize 标签的高度要等文本设好才准，这里按行高居中，避免被底栏裁掉
