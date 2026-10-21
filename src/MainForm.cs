@@ -57,6 +57,15 @@ namespace LiteTrans
         private readonly List<string> _engineKeys = new List<string>();
         private static readonly string[] ModeKeys = { "auto", "forward", "reverse" };
 
+        // 界面按 96 DPI 设计；字体用 pt 会自己随 DPI 放大，间距和控件尺寸也
+        // 必须按同一倍数放大，否则高 DPI 下就是“字变大、框没变大”。
+        // 构造阶段还没有窗口句柄，拿不到真实 DPI，先按 1.0 建界面，
+        // OnHandleCreated 时再按实际缩放整体折算一次。
+        private float _dpi = 1f;
+
+        /// <summary>96 DPI 设计值 → 当前 DPI 的物理像素</summary>
+        private int D(int px) { return (int)Math.Round(px * _dpi); }
+
         public MainForm(TrayApp app)
         {
             _app = app;
@@ -75,14 +84,63 @@ namespace LiteTrans
             }
         }
 
+        /// <summary>拖到不同缩放的显示器时，重新折算并重排一遍</summary>
+        protected override void OnDpiChanged(DpiChangedEventArgs e)
+        {
+            base.OnDpiChanged(e);
+            SyncDpi();
+        }
+
+        private void SyncDpi()
+        {
+            float dpi = UiScale.Factor(this);
+            bool changed = Math.Abs(dpi - _dpi) > 0.01f;
+            _dpi = dpi;
+            if (changed) ApplyDpiScale();
+        }
+
+        /// <summary>C.WinW/WinH 存的是 96 DPI 设计值，这里按当前缩放出实际窗口尺寸</summary>
+        private void ApplyWindowSize()
+        {
+            int w = Math.Max(D(420), D(C.WinW));
+            int h = Math.Max(D(300), D(C.WinH));
+            if (Width != w || Height != h) Size = new Size(w, h);
+        }
+
+        /// <summary>按当前 DPI 重新给控件定尺寸；字体是 pt，自己会跟着缩放</summary>
+        private void ApplyDpiScale()
+        {
+            if (_bar == null) return;
+
+            _bar.Height = D(40);
+            _foot.Height = D(44);
+
+            _title.Location = new Point(D(14), D(10));
+            _modePicker.Size = new Size(D(190), D(26));
+            _modePicker.DropDownWidth = D(240);
+
+            _btnPin.Size = _btnGear.Size = _btnClose.Size = new Size(D(32), D(28));
+
+            _enginePicker.Size = new Size(D(126), D(26));
+            _enginePicker.DropDownWidth = D(220);
+            _btnTrans.Size = new Size(D(76), D(30));
+            _btnSpeak.Size = _btnCopy.Size = new Size(D(32), D(28));
+
+            _engineLabel.Location = new Point(D(12), D(13));
+
+            MinimumSize = new Size(D(420), D(300));
+            ApplyWindowSize();
+            Relayout();
+        }
+
         private void BuildUi()
         {
             SuspendLayout();
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
-            MinimumSize = new Size(420, 300);
-            Size = new Size(C.WinW, C.WinH);
+            MinimumSize = new Size(D(420), D(300));
+            ApplyWindowSize();
             KeyPreview = true;
             DoubleBuffered = true;
             SetStyle(ControlStyles.AllPaintingInWmPaint
@@ -91,7 +149,7 @@ namespace LiteTrans
             Text = "轻译 LiteTrans";
 
             // ——— 标题栏 ———
-            _bar = new Panel { Dock = DockStyle.Top, Height = 40 };
+            _bar = new Panel { Dock = DockStyle.Top, Height = D(40) };
             _bar.MouseDown += Drag_MouseDown;
 
             _title = new Label
@@ -99,7 +157,7 @@ namespace LiteTrans
                 Text = "轻译",
                 AutoSize = true,
                 Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold),
-                Location = new Point(14, 10),
+                Location = new Point(D(14), D(10)),
                 BackColor = Color.Transparent,
             };
             _title.MouseDown += Drag_MouseDown;
@@ -109,7 +167,7 @@ namespace LiteTrans
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 FlatStyle = FlatStyle.Flat,
                 IntegralHeight = false,
-                Size = new Size(190, 26),
+                Size = new Size(D(190), D(26)),
                 Font = new Font("Microsoft YaHei UI", 8.5f),
                 FormattingEnabled = true,
                 DropDownWidth = 240,
@@ -118,9 +176,9 @@ namespace LiteTrans
             };
             _modePicker.SelectedIndexChanged += ModePicker_SelectedIndexChanged;
 
-            _btnPin = new IconBtn { Kind = "pin", Tip = "窗口置顶" };
-            _btnGear = new IconBtn { Kind = "gear", Tip = "设置" };
-            _btnClose = new IconBtn { Kind = "close", Tip = "收回托盘 (Esc)" };
+            _btnPin = new IconBtn { Kind = "pin", Tip = "窗口置顶", Size = new Size(D(32), D(28)) };
+            _btnGear = new IconBtn { Kind = "gear", Tip = "设置", Size = new Size(D(32), D(28)) };
+            _btnClose = new IconBtn { Kind = "close", Tip = "收回托盘 (Esc)", Size = new Size(D(32), D(28)) };
             _btnPin.Click += (s, e) =>
             {
                 C.TopMost = !C.TopMost;
@@ -182,7 +240,7 @@ namespace LiteTrans
             _caseBtns = new FlatBtn[4];
             for (int i = 0; i < _caseBtns.Length; i++)
             {
-                var btn = new FlatBtn { Radius = 5, Visible = false, Font = new Font("Consolas", 8.5f) };
+                var btn = new FlatBtn { Radius = D(5), Visible = false, Font = new Font("Consolas", 8.5f) };
                 btn.Click += CaseChip_Click;
                 _caseTip.SetToolTip(btn, CaseTips[i]);
                 _caseBtns[i] = btn;
@@ -194,7 +252,7 @@ namespace LiteTrans
             _loadingTimer.Tick += delegate { UpdateLoadingDisplay(); };
 
             // ——— 底部 ———
-            _foot = new Panel { Dock = DockStyle.Bottom, Height = 44 };
+            _foot = new Panel { Dock = DockStyle.Bottom, Height = D(44) };
             _foot.MouseDown += EdgeResize_MouseDown;
             _foot.MouseMove += EdgeResize_MouseMove;
             _foot.MouseLeave += EdgeResize_MouseLeave;
@@ -210,7 +268,7 @@ namespace LiteTrans
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 FlatStyle = FlatStyle.Flat,
                 IntegralHeight = false,
-                Size = new Size(126, 26),
+                Size = new Size(D(126), D(26)),
                 Font = new Font("Microsoft YaHei UI", 8.5f),
                 FormattingEnabled = true,
                 DropDownWidth = 220,
@@ -225,10 +283,10 @@ namespace LiteTrans
                 AutoEllipsis = true,
                 BackColor = Color.Transparent,
             };
-            _btnTrans = new FlatBtn { Text = "翻译", Primary = true, Size = new Size(76, 30) };
+            _btnTrans = new FlatBtn { Text = "翻译", Primary = true, Size = new Size(D(76), D(30)) };
             _btnTrans.Click += (s, e) => TranslateNow(_src.Text);
-            _btnSpeak = new IconBtn { Kind = "speak", Tip = "朗读译文" };
-            _btnCopy = new IconBtn { Kind = "copy", Tip = "复制译文" };
+            _btnSpeak = new IconBtn { Kind = "speak", Tip = "朗读译文", Size = new Size(D(32), D(28)) };
+            _btnCopy = new IconBtn { Kind = "copy", Tip = "复制译文", Size = new Size(D(32), D(28)) };
             _btnSpeak.Click += (s, e) => SpeakResult();
             _btnCopy.Click += (s, e) => CopyResult();
 

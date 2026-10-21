@@ -10,6 +10,12 @@ namespace LiteTrans
         private readonly TrayApp _app;
         private Config _c;                 // 编辑副本，点保存才写回
 
+        // 设置窗口同样按 96 DPI 设计，运行时按当前缩放折算
+        private float _dpi = UiScale.SystemFactor();
+
+        internal int D(int px) { return (int)Math.Round(px * _dpi); }
+        internal float DpiFactor { get { return _dpi; } }
+
         private Panel _nav, _body;
         private readonly List<FlatBtn> _tabs = new List<FlatBtn>();
         private readonly List<Panel> _pages = new List<Panel>();
@@ -47,8 +53,8 @@ namespace LiteTrans
             StartPosition = FormStartPosition.CenterScreen;
             // 窗口不能超出屏幕工作区，否则小分辨率下底部按钮会被任务栏或屏幕边缘吃掉
             var work = Screen.FromPoint(Cursor.Position).WorkingArea;
-            ClientSize = new Size(Math.Min(860, work.Width - 40), Math.Min(700, work.Height - 60));
-            MinimumSize = new Size(720, 420);
+            ClientSize = new Size(Math.Min(D(860), work.Width - D(40)), Math.Min(D(700), work.Height - D(60)));
+            MinimumSize = new Size(D(720), D(420));
             // WinForms 会按字体缩放整窗尺寸，高 DPI 下可能顶出屏幕，加载时再收一次
             Load += delegate
             {
@@ -74,23 +80,28 @@ namespace LiteTrans
             };
 
             // 左侧导航
-            _nav = new Panel { Dock = DockStyle.Left, Width = 132, BackColor = t.Panel };
+            _nav = new Panel { Dock = DockStyle.Left, Width = D(132), BackColor = t.Panel };
             Controls.Add(_nav);
 
             // 右侧内容
-            _body = new Panel { Dock = DockStyle.Fill, BackColor = t.Bg, Padding = new Padding(18, 14, 18, 0) };
+            _body = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = t.Bg,
+                Padding = new Padding(D(18), D(14), D(18), 0),
+            };
             Controls.Add(_body);
             _body.BringToFront();
 
             // 底部按钮条
-            var foot = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = t.Bg };
-            _btnSave = new FlatBtn { Text = "保存", Primary = true, Size = new Size(86, 32) };
-            _btnCancel = new FlatBtn { Text = "取消", Size = new Size(86, 32) };
+            var foot = new Panel { Dock = DockStyle.Bottom, Height = D(52), BackColor = t.Bg };
+            _btnSave = new FlatBtn { Text = "保存", Primary = true, Size = new Size(D(86), D(32)) };
+            _btnCancel = new FlatBtn { Text = "取消", Size = new Size(D(86), D(32)) };
             _hint = new Label
             {
                 AutoSize = true,
                 ForeColor = t.SubText,
-                Location = new Point(18, 18),
+                Location = new Point(D(18), D(18)),
                 BackColor = Color.Transparent,
                 Text = "配置文件：%APPDATA%" + (char)92 + "LiteTrans" + (char)92 + "config.json",
             };
@@ -99,8 +110,8 @@ namespace LiteTrans
             foot.Controls.AddRange(new Control[] { _hint, _btnSave, _btnCancel });
             foot.Resize += delegate
             {
-                _btnSave.Location = new Point(foot.Width - _btnSave.Width - 18, 10);
-                _btnCancel.Location = new Point(_btnSave.Left - _btnCancel.Width - 8, 10);
+                _btnSave.Location = new Point(foot.Width - _btnSave.Width - D(18), D(10));
+                _btnCancel.Location = new Point(_btnSave.Left - _btnCancel.Width - D(8), D(10));
             };
             Controls.Add(foot);
             // 注意顺序：Dock 布局按 z-order 倒序分配空间，Fill 的内容区必须排在最前，
@@ -111,8 +122,8 @@ namespace LiteTrans
 
             ResumeLayout();
             foot.PerformLayout();
-            _btnSave.Location = new Point(foot.Width - _btnSave.Width - 18, 10);
-            _btnCancel.Location = new Point(_btnSave.Left - _btnCancel.Width - 8, 10);
+            _btnSave.Location = new Point(foot.Width - _btnSave.Width - D(18), D(10));
+            _btnCancel.Location = new Point(_btnSave.Left - _btnCancel.Width - D(8), D(10));
             SelectTab(0);
         }
 
@@ -143,9 +154,9 @@ namespace LiteTrans
                 var btn = new FlatBtn
                 {
                     Text = names[i],
-                    Size = new Size(116, 34),
-                    Location = new Point(8, 12 + i * 40),
-                    Radius = 6,
+                    Size = new Size(D(116), D(34)),
+                    Location = new Point(D(8), D(12) + i * D(40)),
+                    Radius = D(6),
                 };
                 int idx = i;
                 btn.Click += (s, e) => SelectTab(idx);
@@ -155,14 +166,14 @@ namespace LiteTrans
         }
 
         /// <summary>让页面内容跟随窗口宽度，并按实际内容高度给出滚动范围</summary>
-        private static void SyncPage(Panel page, PageBuilder pb)
+        private void SyncPage(Panel page, PageBuilder pb)
         {
             bool widthChanged = false;
             if (page.ClientSize.Width > 0)
             {
                 // 始终按“垂直滚动条已占位”算宽度：这样滚动条出现与否都得到同一个值，
                 // 不会因为先设宽、滚动条再冒出来而挤出一条多余的水平滚动条。
-                int w = page.ClientSize.Width - 4;
+                int w = page.ClientSize.Width - D(4);
                 if (!page.VerticalScroll.Visible) w -= SystemInformation.VerticalScrollBarWidth;
                 widthChanged = pb.SetContentWidth(w);
             }

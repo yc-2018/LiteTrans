@@ -25,6 +25,8 @@ namespace LiteTrans
                 text = SafeClipboardText();
 
             ApplyTheme();
+            // 窗口句柄已就绪，这里才拿得到真实缩放；按它定尺寸再定位
+            SyncDpi();
             PositionWindow();
 
             Show();
@@ -77,7 +79,9 @@ namespace LiteTrans
             if (C.ShowPosition == "remember" && C.WinX >= 0 && C.WinY >= 0)
             {
                 var pt = new Point(C.WinX, C.WinY);
-                if (Screen.FromPoint(pt).WorkingArea.IntersectsWith(new Rectangle(pt, Size)))
+                var screenOf = Screen.FromPoint(pt).WorkingArea;
+                var remembered = new Rectangle(pt, new Size(Math.Max(D(420), D(C.WinW)), Math.Max(D(300), D(C.WinH))));
+                if (screenOf.IntersectsWith(remembered))
                 {
                     Location = pt;
                     return;
@@ -125,7 +129,9 @@ namespace LiteTrans
             }
             if (WindowState == FormWindowState.Normal)
             {
-                C.WinW = Width; C.WinH = Height;
+                // 配置里统一存 96 DPI 设计值，换缩放后不会被二次放大
+                C.WinW = Math.Max(420, (int)Math.Round(Width / Math.Max(0.01f, _dpi)));
+                C.WinH = Math.Max(300, (int)Math.Round(Height / Math.Max(0.01f, _dpi)));
             }
             C.Save();
             Hide();
@@ -246,7 +252,7 @@ namespace LiteTrans
         {
             var screen = Screen.FromControl(this).WorkingArea;
             int engineCount = Translator.GetConfiguredEngineKeys(C).Count;
-            int desired = Math.Max(560, 360 + engineCount * 70);
+            int desired = Math.Max(D(560), D(360) + engineCount * D(70));
             desired = Math.Min(desired, screen.Height);
             if (Height >= desired) return;
 

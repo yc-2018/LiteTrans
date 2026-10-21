@@ -6,7 +6,8 @@ namespace LiteTrans
 {
     public partial class MainForm
     {
-        private const int Pad = 12;
+        /// <summary>窗口四周边距（96 DPI 设计值）</summary>
+        private int Pad { get { return D(12); } }
 
         /// <summary>手工布局：原文占上 40%，译文占下 60%</summary>
         private void Relayout()
@@ -84,39 +85,48 @@ namespace LiteTrans
 
         private void RelayoutCore()
         {
+            // BuildUi 期间改窗口尺寸会触发 Resize，此时控件还没建全
+            if (_bar == null || _foot == null || _srcCard == null || _dstCard == null ||
+                _src == null || _dst == null || _title == null || _modePicker == null)
+                return;
+
             int w = ClientSize.Width, h = ClientSize.Height;
             int right = w - Pad;
 
-            // 标题栏右侧按钮，从右往左排
-            _btnClose.Location = new Point(right - _btnClose.Width, 6);
-            _btnGear.Location = new Point(_btnClose.Left - _btnGear.Width - 2, 6);
-            _btnPin.Location = new Point(_btnGear.Left - _btnPin.Width - 2, 6);
+            // 标题栏右侧按钮，从右往左排，整条垂直居中
+            int barCenterY = _bar.Height / 2;
+            int btnY = barCenterY - _btnClose.Height / 2;
+            _btnClose.Location = new Point(right - _btnClose.Width, btnY);
+            _btnGear.Location = new Point(_btnClose.Left - _btnGear.Width - D(2), btnY);
+            _btnPin.Location = new Point(_btnGear.Left - _btnPin.Width - D(2), btnY);
+
+            // 标题垂直居中
+            _title.Location = new Point(D(14), barCenterY - _title.Height / 2);
 
             // 翻译模式下拉框放在标题旁，右侧按钮不再承担方向切换。
-            int modeLeft = _title.Right + 12;
-            int modeWidth = Math.Min(240, Math.Max(150, _btnPin.Left - modeLeft - 10));
-            _modePicker.SetBounds(modeLeft, 7, modeWidth, 26);
+            int modeLeft = _title.Right + D(12);
+            int modeWidth = Math.Min(D(240), Math.Max(D(150), _btnPin.Left - modeLeft - D(10)));
+            _modePicker.SetBounds(modeLeft, barCenterY - D(13), modeWidth, D(26));
 
             int top = _bar.Height;
             int bottom = h - _foot.Height;
             int avail = bottom - top - Pad * 3;
-            if (avail < 80) avail = 80;
-
+            if (avail < D(80)) avail = D(80);
             int srcH = MeasureSrcHeight(w - Pad * 2, avail);
             int dstH = avail - srcH;
 
             _srcCard.SetBounds(Pad, top + Pad, w - Pad * 2, srcH);
             _dstCard.SetBounds(Pad, _srcCard.Bottom + Pad, w - Pad * 2, dstH);
 
-            const int inner = 10;
+            int inner = D(10);
             _src.SetBounds(inner, inner, _srcCard.Width - inner * 2, _srcCard.Height - inner * 2);
 
             int dstInnerW = _dstCard.Width - inner * 2;
             int dstInnerH = _dstCard.Height - inner * 2;
             if (CaseChipsVisible)
             {
-                const int caseH = 26, gap = 6;
-                _dst.SetBounds(inner, inner, dstInnerW, Math.Max(24, dstInnerH - caseH - gap));
+                int caseH = D(26), gap = D(6);
+                _dst.SetBounds(inner, inner, dstInnerW, Math.Max(D(24), dstInnerH - caseH - gap));
                 LayoutCaseChips(inner, _dst.Bottom + gap, dstInnerW, caseH);
             }
             else
@@ -124,24 +134,29 @@ namespace LiteTrans
                 _dst.SetBounds(inner, inner, dstInnerW, dstInnerH);
             }
 
-            // 底部：按钮右对齐
-            _btnTrans.Location = new Point(right - _btnTrans.Width, 7);
-            _btnCopy.Location = new Point(_btnTrans.Left - _btnCopy.Width - 6, 8);
-            _btnSpeak.Location = new Point(_btnCopy.Left - _btnSpeak.Width - 2, 8);
+            // 底部：按钮右对齐，整条内容垂直居中
+            int footCenterY = _foot.Height / 2;
+            _btnTrans.Location = new Point(right - _btnTrans.Width, footCenterY - _btnTrans.Height / 2);
+            _btnCopy.Location = new Point(_btnTrans.Left - _btnCopy.Width - D(6), footCenterY - _btnCopy.Height / 2);
+            _btnSpeak.Location = new Point(_btnCopy.Left - _btnSpeak.Width - D(2), footCenterY - _btnSpeak.Height / 2);
 
             // 左下角放置可直接切换的引擎选择器，状态信息占用剩余空间。
-            _engineLabel.Location = new Point(Pad, 13);
-            _enginePicker.Location = new Point(_engineLabel.Right + 6, 8);
-            int statusLeft = _enginePicker.Right + 10;
-            int statusRight = _btnSpeak.Left - 10;
-            _status.SetBounds(statusLeft, 8, Math.Max(0, statusRight - statusLeft), 28);
+            // AutoSize 标签的高度要等文本设好才准，这里按行高居中，避免被底栏裁掉
+            int labelH = Math.Max(_engineLabel.PreferredHeight, _engineLabel.Font.Height + D(6));
+            int labelW = Math.Max(_engineLabel.PreferredWidth, D(30));
+            _engineLabel.SetBounds(Pad, footCenterY - labelH / 2, labelW, labelH);
+            int pickerY = footCenterY - _enginePicker.Height / 2;
+            _enginePicker.Location = new Point(_engineLabel.Right + D(6), pickerY);
+            int statusLeft = _enginePicker.Right + D(10);
+            int statusRight = _btnSpeak.Left - D(10);
+            _status.SetBounds(statusLeft, footCenterY - D(14), Math.Max(0, statusRight - statusLeft), D(28));
         }
 
         /// <summary>把四个标识符格式按钮平分排在译文卡片底部一行。</summary>
         private void LayoutCaseChips(int x, int y, int width, int height)
         {
             int n = _caseBtns.Length;
-            const int gap = 6;
+            int gap = D(6);
             int each = (width - gap * (n - 1)) / n;
             for (int i = 0; i < n; i++)
                 _caseBtns[i].SetBounds(x + i * (each + gap), y, each, height);
@@ -156,12 +171,14 @@ namespace LiteTrans
         /// </summary>
         private int MeasureSrcHeight(int cardWidth, int avail)
         {
-            int fontHeight = _src.Font.Height > 0 ? _src.Font.Height : 23;
+            int fontHeight = _src.Font.Height > 0 ? _src.Font.Height : D(23);
             int lineHeight = (int)Math.Ceiling(fontHeight * 1.4);   // RichEdit 实际行距
-            const int padding = 20;                                 // 卡片上下内边距
+            // 卡片内边距：上下各 inner，RichEdit 自身还要留一点余量，否则
+            // 一行都放不下，右侧会常驻一根滚动条
+            int padding = D(10) * 2 + D(6);
 
             int min = lineHeight + padding;         // 空框也要放得下一整行
-            if (min < 46) min = 46;
+            if (min < D(46)) min = D(46);
             int max = (int)(avail * (C.CompactMode ? 0.34 : 0.46));
             if (max < min) return min;
 
@@ -172,7 +189,8 @@ namespace LiteTrans
             catch { lines = 1; }
             if (lines < 1) lines = 1;
 
-            return Math.Max(min, Math.Min(lines * lineHeight + padding, max));
+            int result = Math.Max(min, Math.Min(lines * lineHeight + padding, max));
+            return result;
         }
 
         public void ApplyTheme()
@@ -251,6 +269,7 @@ namespace LiteTrans
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            SyncDpi();
             Native.ApplyRoundCorners(Handle);
             Native.ApplyDarkTitleBar(Handle, Theme.Current.Dark);
             Native.ApplyBorderColor(Handle, Theme.Current.Border);

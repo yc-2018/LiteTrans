@@ -13,12 +13,15 @@ namespace LiteTrans
         private readonly Panel _p;
         private readonly Config _c;
         private readonly List<Action> _commits;
-        private int _y = 4;
+        private int _y;
 
         // 宽度跟随页面变化的控件（说明文字、AI 卡片区等），避免窗口变窄时右侧被裁
         private readonly List<Control> _fluid = new List<Control>();
-        private int _contentW = 596;
+        private int _contentW;
 
+        private readonly float _dpi;
+
+        // 以下都是 96 DPI 的设计值，实际使用时经 D() 折算
         private const int LabelW = 178;
         private const int CtrlX = 190;
         private const int RowH = 34;
@@ -26,9 +29,19 @@ namespace LiteTrans
         /// <summary>按最窄情形测量说明文字高度，窗口变宽后只会多出留白，不会截断尾部</summary>
         private const int NarrowW = 460;
 
+        private int D(int px) { return (int)Math.Round(px * _dpi); }
+
+        /// <summary>供外部（AI 配置卡片等）复用同一套 DPI 折算</summary>
+        internal int Dpi(int px) { return D(px); }
+
+        internal float DpiFactor { get { return _dpi; } }
+
         public PageBuilder(Panel panel, Config cfg, List<Action> commits)
         {
             _p = panel; _c = cfg; _commits = commits;
+            _dpi = UiScale.Factor(panel);
+            _y = D(4);
+            _contentW = D(596);
         }
 
         public int ContentWidth { get { return _contentW; } }
@@ -38,7 +51,7 @@ namespace LiteTrans
 
         public bool SetContentWidth(int width)
         {
-            if (width < 420) width = 420;
+            if (width < D(420)) width = D(420);
             if (width == _contentW) return false;
             _contentW = width;
             foreach (var c in _fluid) c.Width = width;
@@ -53,7 +66,7 @@ namespace LiteTrans
             {
                 int bottom = _y;
                 foreach (Control c in _p.Controls)
-                    if (c.Bottom + 8 > bottom) bottom = c.Bottom + 8;
+                    if (c.Bottom + D(8) > bottom) bottom = c.Bottom + D(8);
                 return bottom;
             }
         }
@@ -67,7 +80,7 @@ namespace LiteTrans
             control.Height = height;
             _p.Controls.Add(control);
             _fluid.Add(control);
-            _y += height + margin;
+            _y += height + D(margin);
         }
 
         public void AddCommit(Action commit)
@@ -88,8 +101,8 @@ namespace LiteTrans
             {
                 Text = text,
                 AutoSize = false,
-                Size = new Size(LabelW, 22),
-                Location = new Point(0, _y + 3),
+                Size = new Size(D(LabelW), D(22)),
+                Location = new Point(0, _y + D(3)),
                 ForeColor = Theme.Current.Text,
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft,
@@ -98,7 +111,7 @@ namespace LiteTrans
 
         public void Section(string title)
         {
-            if (_y > 4) _y += 10;
+            if (_y > D(4)) _y += D(10);
             var l = new Label
             {
                 Text = title,
@@ -109,7 +122,7 @@ namespace LiteTrans
                 BackColor = Color.Transparent,
             };
             _p.Controls.Add(l);
-            _y += 28;
+            _y += D(28);
         }
 
         public void Note(string text)
@@ -121,10 +134,10 @@ namespace LiteTrans
             try
             {
                 h = TextRenderer.MeasureText(text, font,
-                        new Size(NarrowW, int.MaxValue), TextFormatFlags.WordBreak).Height + 4;
+                        new Size(D(NarrowW), int.MaxValue), TextFormatFlags.WordBreak).Height + D(4);
             }
-            catch { h = 34; }
-            if (h < 20) h = 20;
+            catch { h = D(34); }
+            if (h < D(20)) h = D(20);
 
             var l = new Label
             {
@@ -138,7 +151,7 @@ namespace LiteTrans
             };
             _p.Controls.Add(l);
             _fluid.Add(l);
-            _y += h + 10;
+            _y += h + D(10);
         }
 
         /// <summary>带一个可点击链接的说明行</summary>
@@ -151,10 +164,10 @@ namespace LiteTrans
             try
             {
                 h = TextRenderer.MeasureText(text, font,
-                        new Size(NarrowW, int.MaxValue), TextFormatFlags.WordBreak).Height + 4;
+                        new Size(D(NarrowW), int.MaxValue), TextFormatFlags.WordBreak).Height + D(4);
             }
-            catch { h = 34; }
-            if (h < 20) h = 20;
+            catch { h = D(34); }
+            if (h < D(20)) h = D(20);
 
             var l = new LinkLabel
             {
@@ -186,7 +199,7 @@ namespace LiteTrans
             };
             _p.Controls.Add(l);
             _fluid.Add(l);
-            _y += h + 10;
+            _y += h + D(10);
         }
 
         public Toggle Switch(string label, string field, string desc = null)
@@ -196,7 +209,8 @@ namespace LiteTrans
 
             var tg = new Toggle
             {
-                Location = new Point(CtrlX, _y + 3),
+                Size = new Size(D(40), D(22)),
+                Location = new Point(D(CtrlX), _y + D(3)),
                 Checked = (bool)fi.GetValue(_c),
             };
             _p.Controls.Add(tg);
@@ -208,14 +222,14 @@ namespace LiteTrans
                 {
                     Text = desc,
                     AutoSize = false,
-                    Size = new Size(355, 22),
-                    Location = new Point(CtrlX + 52, _y + 6),
+                    Size = new Size(D(355), D(22)),
+                    Location = new Point(D(CtrlX) + D(52), _y + D(6)),
                     ForeColor = Theme.Current.SubText,
                     BackColor = Color.Transparent,
                     Font = new Font("Microsoft YaHei UI", 8.5f),
                 });
             }
-            _y += RowH;
+            _y += D(RowH);
             return tg;
         }
 
@@ -228,8 +242,8 @@ namespace LiteTrans
             {
                 DropDownStyle = ComboBoxStyle.DropDownList,
                 FlatStyle = FlatStyle.Flat,
-                Location = new Point(CtrlX, _y + 1),
-                Width = width,
+                Location = new Point(D(CtrlX), _y + D(1)),
+                Width = D(width),
                 BackColor = Theme.Current.Card,
                 ForeColor = Theme.Current.Text,
                 Font = new Font("Microsoft YaHei UI", 9f),
@@ -246,7 +260,7 @@ namespace LiteTrans
             {
                 if (cb.SelectedIndex >= 0) fi.SetValue(_c, options[cb.SelectedIndex].Key);
             });
-            _y += RowH;
+            _y += D(RowH);
             return cb;
         }
 
@@ -255,12 +269,12 @@ namespace LiteTrans
             var fi = F(field);
             _p.Controls.Add(MakeLabel(label));
 
-            var card = new Card { Location = new Point(CtrlX, _y), Size = new Size(width, 30), BackColor = Theme.Current.Card, Radius = 6 };
+            var card = new Card { Location = new Point(D(CtrlX), _y), Size = new Size(D(width), D(30)), BackColor = Theme.Current.Card, Radius = D(6) };
             var tb = new TextBox
             {
                 BorderStyle = BorderStyle.None,
-                Location = new Point(8, 6),
-                Width = width - 16,
+                Location = new Point(D(8), D(6)),
+                Width = D(width) - D(16),
                 Text = Convert.ToString(fi.GetValue(_c)),
                 BackColor = Theme.Current.Card,
                 ForeColor = Theme.Current.Text,
@@ -280,7 +294,7 @@ namespace LiteTrans
                 }
                 else fi.SetValue(_c, tb.Text.Trim());
             });
-            _y += TextRowH;
+            _y += D(TextRowH);
             return tb;
         }
 
@@ -292,8 +306,8 @@ namespace LiteTrans
             var val = new Label
             {
                 AutoSize = false,
-                Size = new Size(60, 22),
-                Location = new Point(CtrlX + 210, _y + 3),
+                Size = new Size(D(60), D(22)),
+                Location = new Point(D(CtrlX) + D(210), _y + D(3)),
                 ForeColor = Theme.Current.SubText,
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft,
@@ -305,8 +319,8 @@ namespace LiteTrans
 
             var bar = new TrackBar
             {
-                Location = new Point(CtrlX - 6, _y - 2),
-                Width = 210,
+                Location = new Point(D(CtrlX) - D(6), _y - D(2)),
+                Width = D(210),
                 Minimum = min,
                 Maximum = max,
                 Value = cur,
@@ -315,14 +329,14 @@ namespace LiteTrans
             };
             // TrackBar 默认高 45px，会压住下一行控件，必须显式收窄
             bar.AutoSize = false;
-            bar.Height = 26;
+            bar.Height = D(26);
             bar.ValueChanged += delegate { val.Text = bar.Value + suffix; };
             val.Text = bar.Value + suffix;
 
             _p.Controls.Add(bar);
             _p.Controls.Add(val);
             _commits.Add(delegate { fi.SetValue(_c, bar.Value); });
-            _y += RowH + 4;
+            _y += D(RowH) + D(4);
         }
 
         /// <summary>快捷键录制框：点一下再按组合键即可</summary>
@@ -331,12 +345,12 @@ namespace LiteTrans
             var fi = F(field);
             _p.Controls.Add(MakeLabel(label));
 
-            var card = new Card { Location = new Point(CtrlX, _y), Size = new Size(190, 28), BackColor = Theme.Current.Card, Radius = 6 };
+            var card = new Card { Location = new Point(D(CtrlX), _y), Size = new Size(D(190), D(28)), BackColor = Theme.Current.Card, Radius = D(6) };
             var tb = new TextBox
             {
                 BorderStyle = BorderStyle.None,
-                Location = new Point(8, 5),
-                Width = 174,
+                Location = new Point(D(8), D(5)),
+                Width = D(174),
                 ReadOnly = true,
                 Text = Convert.ToString(fi.GetValue(_c)),
                 BackColor = Theme.Current.Card,
@@ -383,7 +397,7 @@ namespace LiteTrans
             {
                 Text = "点击后按下组合键" + (allowEmpty ? "，Delete 清除" : ""),
                 AutoSize = true,
-                Location = new Point(CtrlX + 200, _y + 6),
+                Location = new Point(D(CtrlX) + D(200), _y + D(6)),
                 ForeColor = Theme.Current.SubText,
                 BackColor = Color.Transparent,
                 Font = new Font("Microsoft YaHei UI", 8.5f),
@@ -391,16 +405,16 @@ namespace LiteTrans
             _p.Controls.Add(tip);
 
             _commits.Add(delegate { fi.SetValue(_c, captured); });
-            _y += RowH;
+            _y += D(RowH);
         }
 
         public void ButtonRow(string label, string btnText, EventHandler onClick, int width = 130)
         {
             if (!string.IsNullOrEmpty(label)) _p.Controls.Add(MakeLabel(label));
-            var b = new FlatBtn { Text = btnText, Size = new Size(width, 29), Location = new Point(CtrlX, _y) };
+            var b = new FlatBtn { Text = btnText, Size = new Size(D(width), D(29)), Location = new Point(D(CtrlX), _y) };
             b.Click += onClick;
             _p.Controls.Add(b);
-            _y += RowH + 2;
+            _y += D(RowH) + D(2);
         }
     }
 }

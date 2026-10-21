@@ -75,21 +75,21 @@ namespace LiteTrans
             // 改为高度随卡片数量增长，统一由页面的滚动条负责。
             var host = new Panel
             {
-                Width = 596,
+                Width = p.Dpi(596),
                 AutoScroll = false,
                 BackColor = Theme.Current.Bg,
             };
             var list = new FlowLayoutPanel
             {
-                Location = new Point(0, 38),
-                Width = 592,
+                Location = new Point(0, p.Dpi(38)),
+                Width = p.Dpi(592),
                 AutoScroll = false,
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 BackColor = Theme.Current.Bg,
             };
             var editors = new List<AiProviderEditor>();
-            var add = new FlatBtn { Text = "新增 AI 配置", Size = new Size(130, 29), Location = new Point(0, 2) };
+            var add = new FlatBtn { Text = "新增 AI 配置", Size = new Size(p.Dpi(130), p.Dpi(29)), Location = new Point(0, p.Dpi(2)) };
             host.Controls.Add(add);
             host.Controls.Add(list);
 
@@ -106,7 +106,7 @@ namespace LiteTrans
                 editors.Clear();
                 foreach (var provider in _c.AiProviders)
                 {
-                    var editor = new AiProviderEditor(provider);
+                    var editor = new AiProviderEditor(provider, p.DpiFactor);
                     editor.TestRequested += delegate { CommitEditors(); TestEngine(Config.AiEngineKey(provider)); };
                     editor.RemoveRequested += delegate
                     {
@@ -115,19 +115,19 @@ namespace LiteTrans
                         rebuild();
                     };
                     editors.Add(editor);
-                    editor.Width = Math.Max(300, list.Width - 6);
+                    editor.Width = Math.Max(p.Dpi(300), list.Width - p.Dpi(6));
                     list.Controls.Add(editor);
                 }
-                list.Height = editors.Count * AiProviderEditor.Stride;
+                list.Height = editors.Count * (editors.Count > 0 ? editors[0].StrideValue : 0);
                 // 末尾多留一点空白，滚到底时最后一张卡片的按钮不会贴着窗口边缘
-                host.Height = list.Top + list.Height + 12;
+                host.Height = list.Top + list.Height + p.Dpi(12);
                 host.ResumeLayout();
                 // 卡片数量变了，页面的滚动范围要跟着重算，否则最后一张卡片
                 // 的“测试 / 删除”按钮会卡在视口外滚不出来
                 var owner = host.Parent as ScrollableControl;
                 if (owner != null)
                 {
-                    var want = new Size(0, host.Bottom + 8);
+                    var want = new Size(0, host.Bottom + p.Dpi(8));
                     if (owner.AutoScrollMinSize != want) owner.AutoScrollMinSize = want;
                 }
             };
@@ -149,11 +149,11 @@ namespace LiteTrans
             // 窗口宽度变化时，卡片跟着页面一起伸缩，避免右边框被裁掉
             p.WidthChanged += delegate(int w)
             {
-                list.Width = Math.Max(320, w - 4);
-                foreach (var editor in editors) editor.Width = list.Width - 6;
+                list.Width = Math.Max(p.Dpi(320), w - p.Dpi(4));
+                foreach (var editor in editors) editor.Width = list.Width - p.Dpi(6);
             };
-            list.Width = Math.Max(320, p.ContentWidth - 4);
-            foreach (var e in editors) e.Width = list.Width - 6;
+            list.Width = Math.Max(p.Dpi(320), p.ContentWidth - p.Dpi(4));
+            foreach (var e in editors) e.Width = list.Width - p.Dpi(6);
             p.AddCommit(delegate
             {
                 foreach (var editor in editors) editor.Commit();
@@ -179,7 +179,7 @@ namespace LiteTrans
                 Text = "连通性测试",
                 FormBorderStyle = FormBorderStyle.FixedDialog,
                 StartPosition = FormStartPosition.CenterParent,
-                ClientSize = new System.Drawing.Size(430, 150),
+                ClientSize = new System.Drawing.Size(D(430), D(150)),
                 MaximizeBox = false,
                 MinimizeBox = false,
                 BackColor = Theme.Current.Bg,
@@ -189,7 +189,7 @@ namespace LiteTrans
             var lbl = new Label
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(16),
+                Padding = new Padding(D(16)),
                 Text = "正在测试 …",
                 ForeColor = Theme.Current.Text,
             };
@@ -230,11 +230,19 @@ namespace LiteTrans
     /// <summary>单个 AI 接口的可编辑卡片。</summary>
     internal sealed class AiProviderEditor : Panel
     {
+        // 96 DPI 设计值
         private const int CardHeight = 236;
         private const int GapBelow = 8;
 
+        private readonly float _dpi;
+
+        private int D(int px) { return (int)Math.Round(px * _dpi); }
+
         /// <summary>一张卡片在列表里占用的垂直空间（含卡片之间的间距）。</summary>
-        public const int Stride = CardHeight + GapBelow;
+        public int StrideValue { get { return D(CardHeight) + D(GapBelow); } }
+
+        /// <summary>同 StrideValue；卡片尺寸跟 DPI 有关，这里只保留设计值换算入口。</summary>
+        public static int Stride { get { return 244; } }
 
         private readonly AiProviderConfig _provider;
         private readonly TextBox _name, _url, _key, _model, _prompt;
@@ -243,12 +251,13 @@ namespace LiteTrans
         public event EventHandler TestRequested;
         public event EventHandler RemoveRequested;
 
-        public AiProviderEditor(AiProviderConfig provider)
+        public AiProviderEditor(AiProviderConfig provider, float dpi)
         {
+            _dpi = dpi > 0 ? dpi : 1f;
             _provider = provider;
-            Width = 584;
-            Height = CardHeight;
-            Margin = new Padding(0, 0, 0, GapBelow);
+            Width = D(584);
+            Height = D(CardHeight);
+            Margin = new Padding(0, 0, 0, D(GapBelow));
             BackColor = Theme.Current.Card;
             BorderStyle = BorderStyle.FixedSingle;
 
@@ -258,14 +267,14 @@ namespace LiteTrans
             _model = Field("模型", provider.Model, 8, 110, 566);
             _prompt = Field("提示词", provider.Prompt, 8, 144, 566);
 
-            _enableLabel = new Label { Text = "启用", AutoSize = true, Location = new Point(410, 13), ForeColor = Theme.Current.Text, BackColor = Color.Transparent };
-            _enabled = new Toggle { Location = new Point(450, 10), Checked = provider.Enabled };
+            _enableLabel = new Label { Text = "启用", AutoSize = true, Location = new Point(D(410), D(13)), ForeColor = Theme.Current.Text, BackColor = Color.Transparent };
+            _enabled = new Toggle { Size = new Size(D(40), D(22)), Location = new Point(D(450), D(10)), Checked = provider.Enabled };
             Controls.Add(_enableLabel);
             Controls.Add(_enabled);
 
-            var test = new FlatBtn { Text = "测试", Size = new Size(70, 27), Location = new Point(8, 197) };
+            var test = new FlatBtn { Text = "测试", Size = new Size(D(70), D(27)), Location = new Point(D(8), D(197)) };
             test.Click += delegate { if (TestRequested != null) TestRequested(this, EventArgs.Empty); };
-            var remove = new FlatBtn { Text = "删除", Size = new Size(70, 27), Location = new Point(86, 197) };
+            var remove = new FlatBtn { Text = "删除", Size = new Size(D(70), D(27)), Location = new Point(D(86), D(197)) };
             remove.Click += delegate { if (RemoveRequested != null) RemoveRequested(this, EventArgs.Empty); };
             Controls.Add(test);
             Controls.Add(remove);
@@ -277,25 +286,25 @@ namespace LiteTrans
             base.OnResize(e);
             if (_url == null) return;   // 构造期间设置 Width 会先触发一次
             // 卡片宽度跟随窗口，输入框右端始终贴着卡片内边距
-            int right = ClientSize.Width - 10;
-            int left = 8 + 80;
-            int full = Math.Max(140, right - left);
+            int right = ClientSize.Width - D(10);
+            int left = D(8) + D(80);
+            int full = Math.Max(D(140), right - left);
             _url.Width = full;
             _key.Width = full;
             _model.Width = full;
             _prompt.Width = full;
 
             // 开关比输入框视觉更重，右端比输入框再内缩一点，不要贴着卡片边框
-            _enabled.Left = Math.Max(left + 110, right - _enabled.Width - 6);
+            _enabled.Left = Math.Max(left + D(110), right - _enabled.Width - D(6));
             // 按标签实测宽度留位，写死偏移在不同字体/缩放下会压到开关上
-            _enableLabel.Left = _enabled.Left - _enableLabel.Width - 8;
-            _name.Width = Math.Max(120, _enableLabel.Left - 12 - left);
+            _enableLabel.Left = _enabled.Left - _enableLabel.Width - D(8);
+            _name.Width = Math.Max(D(120), _enableLabel.Left - D(12) - left);
         }
 
         private TextBox Field(string label, string value, int x, int y, int width, bool password = false)
         {
-            var l = new Label { Text = label, AutoSize = false, Size = new Size(74, 25), Location = new Point(x, y + 3), ForeColor = Theme.Current.Text, BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft };
-            var tb = new TextBox { BorderStyle = BorderStyle.FixedSingle, Location = new Point(x + 80, y), Width = width - 80, Height = 25, Text = value ?? "", BackColor = Theme.Current.Bg, ForeColor = Theme.Current.Text, UseSystemPasswordChar = password };
+            var l = new Label { Text = label, AutoSize = false, Size = new Size(D(74), D(25)), Location = new Point(D(x), D(y) + D(3)), ForeColor = Theme.Current.Text, BackColor = Color.Transparent, TextAlign = ContentAlignment.MiddleLeft };
+            var tb = new TextBox { BorderStyle = BorderStyle.FixedSingle, Location = new Point(D(x) + D(80), D(y)), Width = D(width) - D(80), Height = D(25), Text = value ?? "", BackColor = Theme.Current.Bg, ForeColor = Theme.Current.Text, UseSystemPasswordChar = password };
             Controls.Add(l);
             Controls.Add(tb);
             return tb;

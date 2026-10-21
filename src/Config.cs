@@ -1,9 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Text;
 using System.Web.Script.Serialization;
+using System.Windows.Forms;
 
 namespace LiteTrans
 {
@@ -70,6 +72,7 @@ namespace LiteTrans
         public string FontFamily = "Microsoft YaHei UI";
         public string ShowPosition = "center";         // center | cursor | remember
         public int WinX = -1, WinY = -1;
+        /// <summary>窗口尺寸按 96 DPI 设计值保存，显示时再乘当前缩放</summary>
         public int WinW = 600, WinH = 460;
         public int Opacity = 100;                      // 60~100
         public bool CompactMode = false;
@@ -143,7 +146,30 @@ namespace LiteTrans
             catch { /* 配置损坏则回退默认值 */ }
             cfg.NormalizeAiProviders();
             cfg.NormalizeTranslationMode();
+            cfg.NormalizeWindowSize();
             return cfg;
+        }
+
+        /// <summary>
+        /// 旧版本把窗口尺寸按物理像素存进配置，高 DPI 下再乘缩放就会放大两次。
+        /// 判定办法：按设计值放大后若明显超出屏幕，说明存的是物理像素，换算回设计值。
+        /// </summary>
+        public void NormalizeWindowSize()
+        {
+            float dpi = UiScale.SystemFactor();
+            if (dpi > 1.01f)
+            {
+                var screen = Screen.PrimaryScreen == null
+                    ? new Rectangle(0, 0, 1920, 1080)
+                    : Screen.PrimaryScreen.WorkingArea;
+
+                bool tooWide = WinW * dpi > screen.Width * 0.95;
+                bool tooTall = WinH * dpi > screen.Height * 0.95;
+                if (tooWide) WinW = (int)Math.Round(WinW / dpi);
+                if (tooTall) WinH = (int)Math.Round(WinH / dpi);
+            }
+            if (WinW < 420) WinW = 600;
+            if (WinH < 300) WinH = 460;
         }
 
         /// <summary>迁移旧版单 AI 配置，并保证每项都有稳定且唯一的 ID。</summary>
