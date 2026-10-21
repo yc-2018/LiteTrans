@@ -104,9 +104,15 @@ namespace LiteTrans
             _title.Location = new Point(D(14), barCenterY - _title.Height / 2);
 
             // 翻译模式下拉框放在标题旁，右侧按钮不再承担方向切换。
+            // 宽度按最长选项实测：内容只有「固定译成 简体中文」这种长度，
+            // 写死 240 会留一大截空白。
             int modeLeft = _title.Right + D(12);
-            int modeWidth = Math.Min(D(240), Math.Max(D(150), _btnPin.Left - modeLeft - D(10)));
-            _modePicker.SetBounds(modeLeft, barCenterY - D(13), modeWidth, D(26));
+            int modeWidth = MeasureModePickerWidth();
+            int modeRight = Math.Min(_btnPin.Left - D(10), modeLeft + modeWidth);
+            _modePicker.SetBounds(modeLeft, barCenterY - D(13),
+                Math.Max(D(90), modeRight - modeLeft), D(26));
+            // 展开后的列表宽度跟着收窄，否则点开还是原来那么宽
+            _modePicker.DropDownWidth = Math.Max(D(90), modeWidth);
 
             int top = _bar.Height;
             int bottom = h - _foot.Height;
@@ -150,6 +156,34 @@ namespace LiteTrans
             int statusLeft = _enginePicker.Right + D(10);
             int statusRight = _btnSpeak.Left - D(10);
             _status.SetBounds(statusLeft, footCenterY - D(14), Math.Max(0, statusRight - statusLeft), D(28));
+        }
+
+        /// <summary>
+        /// 按下拉框里最长的那条文本算宽度，只留出箭头和一点余量，
+        /// 让控件刚好贴住内容，不再白占一大截标题栏。
+        /// </summary>
+        private int MeasureModePickerWidth()
+        {
+            if (_modePicker == null) return D(150);
+
+            int widest = 0;
+            foreach (var item in _modePicker.Items)
+            {
+                var text = Convert.ToString(item);
+                if (string.IsNullOrEmpty(text)) continue;
+                try
+                {
+                    int w = TextRenderer.MeasureText(text, _modePicker.Font).Width;
+                    if (w > widest) widest = w;
+                }
+                catch { }
+            }
+
+            // 文本宽度 + 左右内边距 + 右侧下拉箭头，内侧再多留一点，
+            // 免得文字紧贴箭头区
+            int extra = D(28) + SystemInformation.VerticalScrollBarWidth;
+            int width = widest + extra;
+            return Math.Max(D(90), Math.Min(D(240), width));
         }
 
         /// <summary>把四个标识符格式按钮平分排在译文卡片底部一行。</summary>

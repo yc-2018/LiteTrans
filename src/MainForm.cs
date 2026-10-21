@@ -116,8 +116,8 @@ namespace LiteTrans
             _foot.Height = D(44);
 
             _title.Location = new Point(D(14), D(10));
-            _modePicker.Size = new Size(D(190), D(26));
-            _modePicker.DropDownWidth = D(240);
+            // 下拉框宽度由 Relayout 按最长选项实测，这里只定高度
+            _modePicker.Size = new Size(_modePicker.Width, D(26));
 
             _btnPin.Size = _btnGear.Size = _btnClose.Size = new Size(D(32), D(28));
 
