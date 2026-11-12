@@ -65,12 +65,11 @@ jobs:
           }
 
           if ($env:EVENT_NAME -eq 'workflow_dispatch') {
-            $existing = git rev-parse -q --verify "refs/tags/$tag^{commit}" 2>$null
-            if ($existing) {
-              $existing = ($existing | Select-Object -First 1).Trim()
-            }
-            if ($existing -and $existing -ne $env:CURRENT_SHA) {
-              throw "标签 $tag 已经指向另一个提交；请从该标签触发工作流，或换一个新标签。"
+            if (git tag --list $tag) {
+              $existing = (git rev-parse "refs/tags/$tag^{commit}").Trim()
+              if ($existing -ne $env:CURRENT_SHA) {
+                throw "标签 $tag 已经指向另一个提交；请从该标签触发工作流，或换一个新标签。"
+              }
             }
           }
 
@@ -118,8 +117,14 @@ jobs:
           CHECKSUM: ${{ steps.package.outputs.checksum }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          $null = gh release view $env:RELEASE_TAG 2>$null
-          if ($LASTEXITCODE -eq 0) {
+          $releaseExists = $false
+          try {
+            $null = gh release view $env:RELEASE_TAG 2>$null
+            $releaseExists = $true
+          } catch {
+            $releaseExists = $false
+          }
+          if ($releaseExists) {
             $oldZips = gh release view $env:RELEASE_TAG --json assets --jq '.assets[].name' | Where-Object { $_ -like '*.zip' }
             foreach ($name in $oldZips) {
               gh release delete-asset $env:RELEASE_TAG $name --yes
