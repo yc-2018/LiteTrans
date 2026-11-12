@@ -28,23 +28,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build LiteTrans
-        shell: cmd
-        run: call build.cmd
-
-      - name: Verify build output
-        shell: pwsh
-        run: |
-          $exe = Join-Path $env:GITHUB_WORKSPACE 'LiteTrans.exe'
-          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
-            throw 'build.cmd 没有生成 LiteTrans.exe'
-          }
-
-          $file = Get-Item -LiteralPath $exe
-          if ($file.Length -lt 10KB) {
-            throw "LiteTrans.exe 文件异常（$($file.Length) bytes）"
-          }
-
       - name: Resolve release metadata
         id: metadata
         shell: pwsh
@@ -81,6 +64,25 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "asset_name=$assetName" >> $env:GITHUB_OUTPUT
           "checksum_name=$checksumName" >> $env:GITHUB_OUTPUT
+
+      - name: Build LiteTrans
+        shell: cmd
+        env:
+          LT_VERSION: ${{ steps.metadata.outputs.version }}
+        run: call build.cmd
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'LiteTrans.exe'
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw 'build.cmd 没有生成 LiteTrans.exe'
+          }
+
+          $file = Get-Item -LiteralPath $exe
+          if ($file.Length -lt 10KB) {
+            throw "LiteTrans.exe 文件异常（$($file.Length) bytes）"
+          }
 
       - name: Prepare release files
         id: package

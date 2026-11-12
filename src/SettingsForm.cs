@@ -105,7 +105,8 @@ namespace LiteTrans
                 ForeColor = t.SubText,
                 Location = new Point(D(18), D(18)),
                 BackColor = Color.Transparent,
-                Text = "配置文件：%APPDATA%" + (char)92 + "LiteTrans" + (char)92 + "config.json",
+                Text = "配置文件：%APPDATA%" + (char)92 + "LiteTrans" + (char)92 + "config.json"
+                     + "　·　版本 " + BuildInfo.Version,
             };
             _btnSave.Click += (s, e) => SaveAndClose();
             _btnCancel.Click += (s, e) => Close();
