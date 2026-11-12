@@ -75,52 +75,36 @@ jobs:
           }
 
           $version = $tag.Substring(1)
-          $packageName = "LiteTrans-$tag-windows-anycpu.zip"
+          $assetName = "LiteTrans.exe"
           $checksumName = "LiteTrans-$tag-SHA256SUMS.txt"
 
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
-          "package_name=$packageName" >> $env:GITHUB_OUTPUT
+          "asset_name=$assetName" >> $env:GITHUB_OUTPUT
           "checksum_name=$checksumName" >> $env:GITHUB_OUTPUT
 
-      - name: Package release files
+      - name: Prepare release files
         id: package
         shell: pwsh
         env:
-          TAG: ${{ steps.metadata.outputs.tag }}
-          PACKAGE_NAME: ${{ steps.metadata.outputs.package_name }}
+          ASSET_NAME: ${{ steps.metadata.outputs.asset_name }}
           CHECKSUM_NAME: ${{ steps.metadata.outputs.checksum_name }}
         run: |
-          $stage = Join-Path $env:RUNNER_TEMP "LiteTrans-$env:TAG"
-          $package = Join-Path $env:GITHUB_WORKSPACE $env:PACKAGE_NAME
+          $asset = Join-Path $env:GITHUB_WORKSPACE $env:ASSET_NAME
           $checksum = Join-Path $env:GITHUB_WORKSPACE $env:CHECKSUM_NAME
 
-          if (Test-Path -LiteralPath $stage) {
-            Remove-Item -LiteralPath $stage -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path $stage | Out-Null
+          $hash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $env:ASSET_NAME" | Set-Content -LiteralPath $checksum -Encoding utf8NoBOM
 
-          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'LiteTrans.exe') -Destination $stage
-          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'README.md') -Destination $stage
-          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'LICENSE') -Destination $stage
-
-          if (Test-Path -LiteralPath $package) {
-            Remove-Item -LiteralPath $package -Force
-          }
-          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $package -CompressionLevel Optimal
-
-          $hash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $env:PACKAGE_NAME" | Set-Content -LiteralPath $checksum -Encoding utf8NoBOM
-
-          "package=$package" >> $env:GITHUB_OUTPUT
+          "asset=$asset" >> $env:GITHUB_OUTPUT
           "checksum=$checksum" >> $env:GITHUB_OUTPUT
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LiteTrans-${{ steps.metadata.outputs.tag }}-windows-anycpu
+          name: LiteTrans-${{ steps.metadata.outputs.tag }}-windows
           path: |
-            ${{ steps.package.outputs.package }}
+            ${{ steps.package.outputs.asset }}
             ${{ steps.package.outputs.checksum }}
           if-no-files-found: error
           retention-days: 14
@@ -130,15 +114,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
-          PACKAGE: ${{ steps.package.outputs.package }}
+          ASSET: ${{ steps.package.outputs.asset }}
           CHECKSUM: ${{ steps.package.outputs.checksum }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
           $null = gh release view $env:RELEASE_TAG 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $env:RELEASE_TAG $env:PACKAGE $env:CHECKSUM --clobber
+            $oldZips = gh release view $env:RELEASE_TAG --json assets --jq '.assets[].name' | Where-Object { $_ -like '*.zip' }
+            foreach ($name in $oldZips) {
+              gh release delete-asset $env:RELEASE_TAG $name --yes
+            }
+            gh release upload $env:RELEASE_TAG $env:ASSET $env:CHECKSUM --clobber
           } else {
-            gh release create $env:RELEASE_TAG $env:PACKAGE $env:CHECKSUM `
+            gh release create $env:RELEASE_TAG $env:ASSET $env:CHECKSUM `
               --target $env:COMMIT_SHA `
               --title "LiteTrans $env:RELEASE_TAG" `
               --generate-notes

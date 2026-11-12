@@ -111,7 +111,7 @@ Windows 11 上的轻量翻译小工具。单个 exe 约 110 KB，常驻托盘，
 ## GitHub 自动发布
 
 仓库中的 `.github/workflows/release.yml` 会在推送 `v主版本.次版本.修订版本` 标签时运行 Windows 构建，
-生成包含 `LiteTrans.exe`、`README.md` 和 `LICENSE` 的压缩包，并自动上传到 GitHub Release，同时附带 SHA-256 校验文件。
+把 `LiteTrans.exe` 直接上传到 GitHub Release，同时附带 SHA-256 校验文件。
 例如：
 
 ```text
