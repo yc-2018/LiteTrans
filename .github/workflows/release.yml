@@ -117,15 +117,9 @@ jobs:
           CHECKSUM: ${{ steps.package.outputs.checksum }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          $releaseExists = $false
-          try {
-            $null = gh release view $env:RELEASE_TAG 2>$null
-            $releaseExists = $true
-          } catch {
-            $releaseExists = $false
-          }
-          if ($releaseExists) {
-            $oldZips = gh release view $env:RELEASE_TAG --json assets --jq '.assets[].name' | Where-Object { $_ -like '*.zip' }
+          $tags = @(gh release list --limit 200 --json tagName --jq '.[].tagName')
+          if ($tags -contains $env:RELEASE_TAG) {
+            $oldZips = @(gh release view $env:RELEASE_TAG --json assets --jq '.assets[].name' | Where-Object { $_ -like '*.zip' })
             foreach ($name in $oldZips) {
               gh release delete-asset $env:RELEASE_TAG $name --yes
             }
