@@ -1,8 +1,9 @@
 # 轻译 LiteTrans
 
-Windows 11 上的轻量翻译小工具。单个 exe 约 110 KB，常驻托盘，不装任何运行时。
+Windows 11 上的轻量翻译小工具。单个 exe 约 150 KB，常驻托盘，不装任何运行时。
 
-![](https://img11.360buyimg.com/cxxjwimg/jfs/t1/513041/40/16863/172878/6aa898a7F6b54104a/06d776b2ede96648.webp)
+![主界面](https://img11.360buyimg.com/cxxjwimg/jfs/t1/576203/32/5260/95620/6af73c16Fb86bbffb/06d769053c97a666.webp)
+![设置界面](https://img11.360buyimg.com/cxxjwimg/jfs/t1/570885/28/8492/89696/6af73c7aFe5b62062/06d75982c3c2704b.webp)
 
 ## 快速开始
 
